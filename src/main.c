@@ -13,6 +13,7 @@
 
 #include "main.h"
 #include "utils.c"
+#include "lexer.c"
 
 /* NOTE(Abid): EarthRadius is generally expected to be 6372.8 */
 internal f64
@@ -47,8 +48,7 @@ StrLen(char *Str) {
 }
 
 internal void
-OffloadToBuffer(char *Buffer, u64 *BufferPointer, u64 BufferSize, f64 Y0, f64 Y1, f64 X0, f64 X1,
-                f64 *ResultBuffer, u64 *ResultPointer, u64 ResultSize, bool IsLast,
+OffloadToBuffer(mem_arena *JSONBuffer, mem_arena *ResultBuffer, f64 Y0, f64 Y1, f64 X0, f64 X1, bool IsLast,
                 char *JSONFilename, char *F64Filename) {
     char *Suffix = "\n]}";
     u64 SuffixLen = 3;
@@ -57,43 +57,48 @@ OffloadToBuffer(char *Buffer, u64 *BufferPointer, u64 BufferSize, f64 Y0, f64 Y1
      *             length to be 3 + FloatPrecision, which will not always be true. */
     u32 Precision = 20;
     i32 NumCharsPerPair = 1 + 2 + 4*4 + 4 + 3 + 1 + 1 + 4*(4 + 1 + Precision);
-    sprintf_s(Buffer + *BufferPointer, BufferSize-*BufferPointer,
+    sprintf_s(ArenaCurrent(JSONBuffer), JSONBuffer->Size - JSONBuffer->Used,
               "\t{\"x0\":%.*f, \"y0\":%.*f, \"x1\":%.*f, \"y1\":%.*f}",
               Precision, X0, Precision, Y0, Precision, X1, Precision, Y1);
-    *BufferPointer += StrLen(Buffer + *BufferPointer);
+    ArenaAdvance(JSONBuffer, StrLen(ArenaCurrent(JSONBuffer)), char);
     if(IsLast) {
-        sprintf_s(Buffer + *BufferPointer, SuffixLen+1, Suffix);
-        *BufferPointer += SuffixLen;
+        sprintf_s(ArenaCurrent(JSONBuffer), SuffixLen+1, Suffix);
+        ArenaAdvance(JSONBuffer, SuffixLen, char);
     } else {
-        sprintf_s(Buffer + *BufferPointer, 3, ",\n");
-        *BufferPointer += 2;
+        sprintf_s(ArenaCurrent(JSONBuffer), 3, ",\n");
+        ArenaAdvance(JSONBuffer, 2, char);
     }
 
     /* NOTE(Abid): Save the result to buffer and .f64 file. */
-    f64 Result = ReferenceHaversine(X0, Y0, X1, Y1, 6372.8);
-    ResultBuffer[*ResultPointer] = Result;
-    (*ResultPointer)++;
-    if(*ResultPointer >= ResultSize/sizeof(f64) || IsLast) {
+    f64 *Dest = ArenaCurrent(ResultBuffer);
+    *Dest = ReferenceHaversine(X0, Y0, X1, Y1, 6372.8);
+    ArenaAdvance(ResultBuffer, 1, f64);
+
+    /* NOTE(Abid): If end of buffer, or we are out of memory for next round, then flush. */
+    if(ResultBuffer->Used >= ResultBuffer->Size/sizeof(f64) || IsLast) {
         FILE *FileHandle = NULL;
         fopen_s(&FileHandle, F64Filename, "ab");
         Assert(FileHandle, "cannot save to .f64 file.");
-        fwrite(ResultBuffer, sizeof(f64), *ResultPointer, FileHandle);
+        fwrite(ResultBuffer->Ptr, sizeof(f64), ResultBuffer->Used, FileHandle);
         fclose(FileHandle);
-        *ResultPointer = 0;
+        ResultBuffer->Used = 0;
     }
 
-    if((*BufferPointer + NumCharsPerPair + SuffixLen + 1 >= BufferSize) || IsLast) {
+    /* NOTE(Abid): If end of buffer, or we are out of memory for next round, then flush. */
+    if((JSONBuffer->Used + NumCharsPerPair + SuffixLen + 1 >= JSONBuffer->Size) || IsLast) {
         FILE *FileHandle = NULL;
         fopen_s(&FileHandle, JSONFilename, "ab");
         Assert(FileHandle, "cannot save to .json file.");
-        fputs(Buffer, FileHandle);
+        fputs(JSONBuffer->Ptr, FileHandle);
         fclose(FileHandle);
-        *BufferPointer = 0;
+        JSONBuffer->Used = 0;
     }
 }
 
 internal stat_f64
 GenerateHaversineJSON(u64 NumberPairs, u64 NumClusters, char *Filename, mem_arena *Arena) {
+    stat_f64 HaversineStat = {0};
+
     u64 FilenameLen = StrLen(Filename);
     char *JSONExtension = ".json";
     char *F64Extension = ".f64";
@@ -111,30 +116,25 @@ GenerateHaversineJSON(u64 NumberPairs, u64 NumClusters, char *Filename, mem_aren
     for(u64 Idx = 0; Idx < F64ExtensionLen; ++Idx) F64Filename[FilenameLen+Idx] = F64Extension[Idx];
     F64Filename[F64ExtensionLen+FilenameLen] = '\0';
 
-    stat_f64 HaversineState = {0};
-
-    u64 BufferSize = (u64)((Arena->MaxSize - Arena->Used) / 2);
-    char *Buffer = PushSize(Arena, BufferSize);
-    usize BufferPointer = 0;
-
-    u64 ResultSize = Arena->MaxSize - Arena->Used;
-    /// u64 ResultSize = 4*sizeof(f64);
-    f64 *ResultBuffer = PushSize(Arena, ResultSize);
-    usize ResultPointer = 0;
+    mem_arena JSONBuffer = SubArenaCreate((usize)((Arena->Size - Arena->Used) / 2) - sizeof(usize), Arena);
+    mem_arena ResultBuffer = SubArenaCreate(Arena->Size - Arena->Used - sizeof(usize), Arena);
 
     /* NOTE(Abid): Alignment to the 8 bytes of f64. */
     usize Alignment = sizeof(f64);
-    Assert(ResultSize >= 2*sizeof(f64)*Alignment, "minimum size requirement for result buffer not met.");
+    Assert(ResultBuffer.Size >= 2*sizeof(f64)*Alignment, "minimum size requirement for result buffer not met.");
     usize AlignmentMask = Alignment - 1;
-    if((usize)ResultBuffer & AlignmentMask) {
-        usize AligmentOffset = Alignment - ((usize)ResultBuffer & AlignmentMask);
-        ResultBuffer = (void *)((usize)ResultBuffer + AligmentOffset);
-        ResultSize -= sizeof(f64);
+    if((usize)ResultBuffer.Ptr & AlignmentMask) {
+        usize AligmentOffset = Alignment - ((usize)ResultBuffer.Ptr & AlignmentMask);
+        ResultBuffer.Ptr = (void *)((usize)ResultBuffer.Ptr + AligmentOffset);
+        ResultBuffer.Size -= sizeof(f64);
     }
 
     char *Prefix = "{\"pairs\":[\n";
     u64 PrefixLen = 11;
-    for(; BufferPointer < PrefixLen; ++BufferPointer) Buffer[BufferPointer] = Prefix[BufferPointer];
+    for(; JSONBuffer.Used < PrefixLen; ArenaAdvance(&JSONBuffer, 1, char)) {
+        char *Dest = ArenaCurrent(&JSONBuffer);
+        *Dest = Prefix[JSONBuffer.Used];
+    }
 
     if(NumClusters) {
         // NumClusters = (NumClusters) ? NumClusters : RandRangeU64(20, 300);
@@ -160,12 +160,11 @@ GenerateHaversineJSON(u64 NumberPairs, u64 NumClusters, char *Filename, mem_aren
                 f64 Lat2 = RandRangeF64(Lat2Start, Lat2Start+Lat2Size);
                 f64 Lon1 = RandRangeF64(Lon1Start, Lon1Start+Lon1Size);
                 f64 Lon2 = RandRangeF64(Lon2Start, Lon2Start+Lon2Size);
-                StatF64Accumulate(Lat1, &HaversineState);
-                StatF64Accumulate(Lat2, &HaversineState);
-                StatF64Accumulate(Lon1, &HaversineState);
-                StatF64Accumulate(Lon2, &HaversineState);
-                OffloadToBuffer(Buffer, &BufferPointer, BufferSize, Lat1, Lat2, Lon1, Lon2,
-                                ResultBuffer, &ResultPointer, ResultSize,
+                StatF64Accumulate(Lat1, &HaversineStat);
+                StatF64Accumulate(Lat2, &HaversineStat);
+                StatF64Accumulate(Lon1, &HaversineStat);
+                StatF64Accumulate(Lon2, &HaversineStat);
+                OffloadToBuffer(&JSONBuffer, &ResultBuffer, Lat1, Lat2, Lon1, Lon2,
                                 ClusterIdx*NumPairPerCluster + PairIdx + 1 == NumberPairs,
                                 JSONFilename, F64Filename);
             }
@@ -176,18 +175,17 @@ GenerateHaversineJSON(u64 NumberPairs, u64 NumClusters, char *Filename, mem_aren
             f64 Lat2 = RandRangeF64(-90., 90.);
             f64 Lon1 = RandRangeF64(-180., 180.);
             f64 Lon2 = RandRangeF64(-180., 180.);
-            StatF64Accumulate(Lat1, &HaversineState);
-            StatF64Accumulate(Lat2, &HaversineState);
-            StatF64Accumulate(Lon1, &HaversineState);
-            StatF64Accumulate(Lon2, &HaversineState);
+            StatF64Accumulate(Lat1, &HaversineStat);
+            StatF64Accumulate(Lat2, &HaversineStat);
+            StatF64Accumulate(Lon1, &HaversineStat);
+            StatF64Accumulate(Lon2, &HaversineStat);
 
-            OffloadToBuffer(Buffer, &BufferPointer, BufferSize, Lat1, Lat2, Lon1, Lon2,
-                            ResultBuffer, &ResultPointer, ResultSize,
+            OffloadToBuffer(&JSONBuffer, &ResultBuffer, Lat1, Lat2, Lon1, Lon2,
                             Idx+1 == NumberPairs, JSONFilename, F64Filename);
         }
     }
 
-    return HaversineState;
+    return HaversineStat;
 }
 
 i32 main(i32 argc, char* argv[]) {
@@ -198,8 +196,8 @@ i32 main(i32 argc, char* argv[]) {
     char* Filename = argv[4];
 
     RandSeed(Seed);
-    mem_arena Arena = AllocateArena(Megabyte(1));
-    stat_f64 GenerationStat = GenerateHaversineJSON(NumPairs, NumClusters, Filename, &Arena);
+    mem_arena *Arena = AllocateArena(Megabyte(1));
+    stat_f64 GenerationStat = GenerateHaversineJSON(NumPairs, NumClusters, Filename, Arena);
     printf("Seed: %lld\nPair Count: %lld\nExpected Sum: %f\n\n",
             Seed, NumPairs, GenerationStat.Sum);
 

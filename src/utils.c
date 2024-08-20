@@ -12,13 +12,13 @@
 #include <windows.h>
 #endif
 
-internal f64
+inline internal f64
 Square(f64 A) {
     f64 Result = (A*A);
     return Result;
 }
 
-internal f64 
+inline internal f64 
 RadiansFromDegrees(f64 Degrees) {
     f64 Result = 0.01745329251994329577f * Degrees;
     return Result;
@@ -47,12 +47,12 @@ PlatoformAllocate(usize Size) {
     return Result;
 }
 
-internal mem_arena
+internal mem_arena *
 AllocateArena(usize BytesToAllocate) {
-    mem_arena Arena = {0};
-    Arena.MaxSize = BytesToAllocate;
-    Arena.Ptr = PlatoformAllocate(Arena.MaxSize);
-    Arena.Used = 0;
+    mem_arena *Arena = PlatoformAllocate(sizeof(mem_arena) + BytesToAllocate);
+    Arena->Ptr = (void *)(Arena + 1);
+    Arena->Size = BytesToAllocate;
+    Arena->Used = 0;
 
     return Arena;
 }
@@ -61,9 +61,30 @@ AllocateArena(usize BytesToAllocate) {
 #define PushArray(Arena, Type, Count) (Type *)PushSize(Arena, (Count)*sizeof(Type))
 internal void *
 PushSize(mem_arena *Arena, usize Size) {
-    Assert(Arena->Used + Size <= Arena->MaxSize, "not enough arena memory");
+    /* NOTE(Abid): If out of memory swap the old arena with a newly allocated one. */
+    if(Arena->Used + Size <= Arena->Size) {
+        Arena = (mem_arena *)Arena->Ptr - 1;
+        mem_arena *NewArena = AllocateArena(Arena->Size);
+        NewArena->Prev = Arena;
+        Arena->Next = NewArena;
+        Arena = NewArena;
+    }
     void *Result = (u8 *)Arena->Ptr + Arena->Used;
     Arena->Used += Size;
 
     return Result;
 }
+
+#define ArenaCurrent(Arena) (void *)((u8 *)(Arena)->Ptr + (Arena)->Used)
+#define ArenaAdvance(Arena, Number, Type) (Arena)->Used += sizeof(Type)*(Number)
+
+inline internal mem_arena
+SubArenaCreate(usize Size, mem_arena *Arena) {
+    mem_arena SubArena = {0};
+    SubArena.Size = Size;
+    SubArena.Ptr = PushSize(Arena, SubArena.Size);
+    SubArena.Used = 0;
+
+    return SubArena;
+}
+

@@ -103,7 +103,9 @@ RandU64() {
 /* TODO(Abid): Get rid of modulus in here (faster). */
 inline internal u64
 RandRangeU64(u64 Min, u64 Max) { return Min + RandU64() % (Max-Min); }
+
 inline internal u32 RandU32() { return (u32)RandU64(); }
+
 inline internal u16 RandU16() {
     if(__GLOBALRandState.NumU16Reserves--)
         return (u16)(__GLOBALRandState.U16Reserves >>= 16);
@@ -112,6 +114,7 @@ inline internal u16 RandU16() {
 
     return (u16)__GLOBALRandState.U16Reserves;
 }
+
 inline internal u8 RandU8() {
     if(__GLOBALRandState.NumU8Reserves--)
         return (u8)(__GLOBALRandState.U8Reserves >>= 8);
