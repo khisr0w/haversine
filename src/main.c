@@ -13,7 +13,7 @@
 
 #include "main.h"
 #include "utils.c"
-#include "lexer.c"
+#include "json_parse.c"
 
 /* NOTE(Abid): EarthRadius is generally expected to be 6372.8 */
 internal f64
@@ -57,7 +57,7 @@ OffloadToBuffer(mem_arena *JSONBuffer, mem_arena *ResultBuffer, f64 Y0, f64 Y1, 
      *             length to be 3 + FloatPrecision, which will not always be true. */
     u32 Precision = 20;
     i32 NumCharsPerPair = 1 + 2 + 4*4 + 4 + 3 + 1 + 1 + 4*(4 + 1 + Precision);
-    sprintf_s(ArenaCurrent(JSONBuffer), JSONBuffer->Size - JSONBuffer->Used,
+    sprintf_s(ArenaCurrent(JSONBuffer), JSONBuffer->size - JSONBuffer->used,
               "\t{\"x0\":%.*f, \"y0\":%.*f, \"x1\":%.*f, \"y1\":%.*f}",
               Precision, X0, Precision, Y0, Precision, X1, Precision, Y1);
     ArenaAdvance(JSONBuffer, StrLen(ArenaCurrent(JSONBuffer)), char);
@@ -75,23 +75,23 @@ OffloadToBuffer(mem_arena *JSONBuffer, mem_arena *ResultBuffer, f64 Y0, f64 Y1, 
     ArenaAdvance(ResultBuffer, 1, f64);
 
     /* NOTE(Abid): If end of buffer, or we are out of memory for next round, then flush. */
-    if(ResultBuffer->Used >= ResultBuffer->Size/sizeof(f64) || IsLast) {
+    if(ResultBuffer->used >= ResultBuffer->size/sizeof(f64) || IsLast) {
         FILE *FileHandle = NULL;
         fopen_s(&FileHandle, F64Filename, "ab");
         Assert(FileHandle, "cannot save to .f64 file.");
-        fwrite(ResultBuffer->Ptr, sizeof(f64), ResultBuffer->Used, FileHandle);
+        fwrite(ResultBuffer->ptr, sizeof(f64), ResultBuffer->used, FileHandle);
         fclose(FileHandle);
-        ResultBuffer->Used = 0;
+        ResultBuffer->used = 0;
     }
 
     /* NOTE(Abid): If end of buffer, or we are out of memory for next round, then flush. */
-    if((JSONBuffer->Used + NumCharsPerPair + SuffixLen + 1 >= JSONBuffer->Size) || IsLast) {
+    if((JSONBuffer->used + NumCharsPerPair + SuffixLen + 1 >= JSONBuffer->size) || IsLast) {
         FILE *FileHandle = NULL;
         fopen_s(&FileHandle, JSONFilename, "ab");
         Assert(FileHandle, "cannot save to .json file.");
-        fputs(JSONBuffer->Ptr, FileHandle);
+        fputs(JSONBuffer->ptr, FileHandle);
         fclose(FileHandle);
-        JSONBuffer->Used = 0;
+        JSONBuffer->used = 0;
     }
 }
 
@@ -104,8 +104,8 @@ GenerateHaversineJSON(u64 NumberPairs, u64 NumClusters, char *Filename, mem_aren
     char *F64Extension = ".f64";
     u64 JSONExtensionLen = StrLen(JSONExtension);
     u64 F64ExtensionLen = StrLen(F64Extension);
-    char *JSONFilename = PushSize(Arena, FilenameLen + JSONExtensionLen + 1);
-    char *F64Filename = PushSize(Arena, FilenameLen + F64ExtensionLen + 1);
+    char *JSONFilename = push_size_arena(Arena, FilenameLen + JSONExtensionLen + 1);
+    char *F64Filename = push_size_arena(Arena, FilenameLen + F64ExtensionLen + 1);
 
     for(u64 Idx = 0; Idx < FilenameLen; ++Idx) {
         JSONFilename[Idx] = Filename[Idx];
@@ -116,24 +116,24 @@ GenerateHaversineJSON(u64 NumberPairs, u64 NumClusters, char *Filename, mem_aren
     for(u64 Idx = 0; Idx < F64ExtensionLen; ++Idx) F64Filename[FilenameLen+Idx] = F64Extension[Idx];
     F64Filename[F64ExtensionLen+FilenameLen] = '\0';
 
-    mem_arena JSONBuffer = SubArenaCreate((usize)((Arena->Size - Arena->Used) / 2) - sizeof(usize), Arena);
-    mem_arena ResultBuffer = SubArenaCreate(Arena->Size - Arena->Used - sizeof(usize), Arena);
+    mem_arena JSONBuffer = sub_arena_create((usize)((Arena->size - Arena->used) / 2) - sizeof(usize), Arena);
+    mem_arena ResultBuffer = sub_arena_create(Arena->size - Arena->used - sizeof(usize), Arena);
 
     /* NOTE(Abid): Alignment to the 8 bytes of f64. */
     usize Alignment = sizeof(f64);
-    Assert(ResultBuffer.Size >= 2*sizeof(f64)*Alignment, "minimum size requirement for result buffer not met.");
+    Assert(ResultBuffer.size >= 2*sizeof(f64)*Alignment, "minimum size requirement for result buffer not met.");
     usize AlignmentMask = Alignment - 1;
-    if((usize)ResultBuffer.Ptr & AlignmentMask) {
-        usize AligmentOffset = Alignment - ((usize)ResultBuffer.Ptr & AlignmentMask);
-        ResultBuffer.Ptr = (void *)((usize)ResultBuffer.Ptr + AligmentOffset);
-        ResultBuffer.Size -= sizeof(f64);
+    if((usize)ResultBuffer.ptr & AlignmentMask) {
+        usize AligmentOffset = Alignment - ((usize)ResultBuffer.ptr & AlignmentMask);
+        ResultBuffer.ptr = (void *)((usize)ResultBuffer.ptr + AligmentOffset);
+        ResultBuffer.size -= sizeof(f64);
     }
 
     char *Prefix = "{\"pairs\":[\n";
     u64 PrefixLen = 11;
-    for(; JSONBuffer.Used < PrefixLen; ArenaAdvance(&JSONBuffer, 1, char)) {
+    for(; JSONBuffer.used < PrefixLen; ArenaAdvance(&JSONBuffer, 1, char)) {
         char *Dest = ArenaCurrent(&JSONBuffer);
-        *Dest = Prefix[JSONBuffer.Used];
+        *Dest = Prefix[JSONBuffer.used];
     }
 
     if(NumClusters) {
@@ -188,7 +188,15 @@ GenerateHaversineJSON(u64 NumberPairs, u64 NumClusters, char *Filename, mem_aren
     return HaversineStat;
 }
 
+i32 main() {
+    parse_json("test_out.json");
+
+    return 0;
+}
+
+#if 0
 i32 main(i32 argc, char* argv[]) {
+
     Assert(argc == 5, "[seed] [number of pairs] [number of clusters] [file name]");
     u64 Seed = atoll(argv[1]);
     u64 NumPairs = atoll(argv[2]);
@@ -196,10 +204,11 @@ i32 main(i32 argc, char* argv[]) {
     char* Filename = argv[4];
 
     RandSeed(Seed);
-    mem_arena *Arena = AllocateArena(Megabyte(1));
+    mem_arena *Arena = allocate_arena(Megabyte(1));
     stat_f64 GenerationStat = GenerateHaversineJSON(NumPairs, NumClusters, Filename, Arena);
     printf("Seed: %lld\nPair Count: %lld\nExpected Sum: %f\n\n",
             Seed, NumPairs, GenerationStat.Sum);
 
     return 0;
 }
+#endif

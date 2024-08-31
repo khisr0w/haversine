@@ -10,15 +10,23 @@
 
 typedef struct mem_arena mem_arena;
 struct mem_arena {
-    usize Used;
-    usize Size;
-    void *Ptr;
+    usize used;
+    usize size;
+    void *ptr;
     
-    u32 TempCount;
+    u32 tempcount;
     
-    mem_arena *Next;
-    mem_arena *Prev;
+    mem_arena *next;
+    mem_arena *prev;
 };
+
+typedef struct token token;
+typedef struct {
+    mem_arena *arena;
+
+    token *token_list;
+    token *current_token;
+} memory;
 
 #define UTILS_H
 #endif

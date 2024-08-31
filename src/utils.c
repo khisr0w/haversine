@@ -12,6 +12,14 @@
 #include <windows.h>
 #endif
 
+#define assert(Expr, ErrorStr, ...) \
+    if((Expr)) { } \
+    else { \
+        fprintf(stderr, "ASSERTION ERROR (%s:%d): " ErrorStr "\n", \
+                __FILE__, __LINE__, ##__VA_ARGS__); \
+        *(i32 *)0 = 0; \
+    }
+
 inline internal f64
 Square(f64 A) {
     f64 Result = (A*A);
@@ -25,7 +33,7 @@ RadiansFromDegrees(f64 Degrees) {
 }
 
 inline internal void *
-PlatoformAllocate(usize Size) {
+platform_allocate(usize Size) {
     void *Result = NULL;
 
 #ifdef PLT_WIN
@@ -48,43 +56,54 @@ PlatoformAllocate(usize Size) {
 }
 
 internal mem_arena *
-AllocateArena(usize BytesToAllocate) {
-    mem_arena *Arena = PlatoformAllocate(sizeof(mem_arena) + BytesToAllocate);
-    Arena->Ptr = (void *)(Arena + 1);
-    Arena->Size = BytesToAllocate;
-    Arena->Used = 0;
+allocate_arena(usize bytes_to_allocate) {
+    mem_arena *arena = platform_allocate(sizeof(mem_arena) + bytes_to_allocate);
+    arena->ptr = (void *)(arena + 1);
+    arena->size = bytes_to_allocate;
+    arena->used = 0;
+    arena->next = NULL;
+    arena->prev = NULL;
 
-    return Arena;
+    return arena;
 }
 
-#define PushStruct(Arena, Type) (Type *)PushSize(Arena, sizeof(Type))
-#define PushArray(Arena, Type, Count) (Type *)PushSize(Arena, (Count)*sizeof(Type))
+#define push_struct(type, arena) (type *)push_size(arena, sizeof(type))
+#define push_array(Arena, Type, Count) (Type *)push_size(Arena, (Count)*sizeof(Type))
 internal void *
-PushSize(mem_arena *Arena, usize Size) {
+push_size(memory *current_memory, usize size) {
     /* NOTE(Abid): If out of memory swap the old arena with a newly allocated one. */
-    if(Arena->Used + Size <= Arena->Size) {
-        Arena = (mem_arena *)Arena->Ptr - 1;
-        mem_arena *NewArena = AllocateArena(Arena->Size);
-        NewArena->Prev = Arena;
-        Arena->Next = NewArena;
-        Arena = NewArena;
+    if(current_memory->arena->used + size >= current_memory->arena->size) {
+        printf("Expand memory(Prev = %zi > %zi)\n", current_memory->arena->used + size, current_memory->arena->size);
+        mem_arena *prev_arena = current_memory->arena;
+        mem_arena *new_arena = allocate_arena(prev_arena->size);
+        new_arena->prev = prev_arena;
+        prev_arena->next = new_arena;
+        current_memory->arena = new_arena;
     }
-    void *Result = (u8 *)Arena->Ptr + Arena->Used;
-    Arena->Used += Size;
+
+    void *result = (u8 *)current_memory->arena->ptr + current_memory->arena->used;
+    current_memory->arena->used += size;
+
+    return result;
+}
+internal void *
+push_size_arena(mem_arena *Arena, usize Size){
+    Assert(Arena->used + Size < Arena->size, "not enough arena memory");
+    void *Result = (u8 *)Arena->ptr + Arena->used;
+    Arena->used += Size;
 
     return Result;
 }
 
-#define ArenaCurrent(Arena) (void *)((u8 *)(Arena)->Ptr + (Arena)->Used)
-#define ArenaAdvance(Arena, Number, Type) (Arena)->Used += sizeof(Type)*(Number)
+#define ArenaCurrent(Arena) (void *)((u8 *)(Arena)->ptr + (Arena)->used)
+#define ArenaAdvance(Arena, Number, Type) (Arena)->used += sizeof(Type)*(Number)
 
 inline internal mem_arena
-SubArenaCreate(usize Size, mem_arena *Arena) {
+sub_arena_create(usize Size, mem_arena *Arena) {
     mem_arena SubArena = {0};
-    SubArena.Size = Size;
-    SubArena.Ptr = PushSize(Arena, SubArena.Size);
-    SubArena.Used = 0;
+    SubArena.size = Size;
+    SubArena.ptr = push_size_arena(Arena, SubArena.size);
+    SubArena.used = 0;
 
     return SubArena;
 }
-
