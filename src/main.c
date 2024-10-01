@@ -2,7 +2,7 @@
     |                                                                                  |
     |     Subdirectory:  /src                                                          |
     |    Creation date:  6/28/2024 1:23:31 AM                                          |
-    |    Last Modified:                                                                |
+    |    Last Modified:  9/22/2024 11:03:22 PM                                         |
     |                                                                                  |
     +======================================| Copyright © Sayed Abid Hashimi |==========+  */
 
@@ -14,8 +14,8 @@
 #include "main.h"
 #include "utils.c"
 #include "json_parse.c"
-
-/* NOTE(Abid): EarthRadius is generally expected to be 6372.8 */
+/* NOTE(abid): @23.09.2024*/
+/* NOTE(abid): EarthRadius is generally expected to be 6372.8 */
 internal f64
 ReferenceHaversine(f64 X0, f64 Y0, f64 X1, f64 Y1, f64 EarthRadius) {
     f64 lat1 = Y0;
@@ -53,7 +53,7 @@ OffloadToBuffer(mem_arena *JSONBuffer, mem_arena *ResultBuffer, f64 Y0, f64 Y1, 
     char *Suffix = "\n]}";
     u64 SuffixLen = 3;
 
-    /* NOTE(Abid): We will be overestimating our memory usage since we assume each number's
+    /* NOTE(abid): We will be overestimating our memory usage since we assume each number's
      *             length to be 3 + FloatPrecision, which will not always be true. */
     u32 Precision = 20;
     i32 NumCharsPerPair = 1 + 2 + 4*4 + 4 + 3 + 1 + 1 + 4*(4 + 1 + Precision);
@@ -69,12 +69,12 @@ OffloadToBuffer(mem_arena *JSONBuffer, mem_arena *ResultBuffer, f64 Y0, f64 Y1, 
         ArenaAdvance(JSONBuffer, 2, char);
     }
 
-    /* NOTE(Abid): Save the result to buffer and .f64 file. */
+    /* NOTE(abid): Save the result to buffer and .f64 file. */
     f64 *Dest = ArenaCurrent(ResultBuffer);
     *Dest = ReferenceHaversine(X0, Y0, X1, Y1, 6372.8);
     ArenaAdvance(ResultBuffer, 1, f64);
 
-    /* NOTE(Abid): If end of buffer, or we are out of memory for next round, then flush. */
+    /* NOTE(abid): If end of buffer, or we are out of memory for next round, then flush. */
     if(ResultBuffer->used >= ResultBuffer->size/sizeof(f64) || IsLast) {
         FILE *FileHandle = NULL;
         fopen_s(&FileHandle, F64Filename, "ab");
@@ -84,7 +84,7 @@ OffloadToBuffer(mem_arena *JSONBuffer, mem_arena *ResultBuffer, f64 Y0, f64 Y1, 
         ResultBuffer->used = 0;
     }
 
-    /* NOTE(Abid): If end of buffer, or we are out of memory for next round, then flush. */
+    /* NOTE(abid): If end of buffer, or we are out of memory for next round, then flush. */
     if((JSONBuffer->used + NumCharsPerPair + SuffixLen + 1 >= JSONBuffer->size) || IsLast) {
         FILE *FileHandle = NULL;
         fopen_s(&FileHandle, JSONFilename, "ab");
@@ -104,8 +104,8 @@ GenerateHaversineJSON(u64 NumberPairs, u64 NumClusters, char *Filename, mem_aren
     char *F64Extension = ".f64";
     u64 JSONExtensionLen = StrLen(JSONExtension);
     u64 F64ExtensionLen = StrLen(F64Extension);
-    char *JSONFilename = push_size_arena(Arena, FilenameLen + JSONExtensionLen + 1);
-    char *F64Filename = push_size_arena(Arena, FilenameLen + F64ExtensionLen + 1);
+    char *JSONFilename = push_size(Arena, FilenameLen + JSONExtensionLen + 1);
+    char *F64Filename = push_size(Arena, FilenameLen + F64ExtensionLen + 1);
 
     for(u64 Idx = 0; Idx < FilenameLen; ++Idx) {
         JSONFilename[Idx] = Filename[Idx];
@@ -119,7 +119,7 @@ GenerateHaversineJSON(u64 NumberPairs, u64 NumClusters, char *Filename, mem_aren
     mem_arena JSONBuffer = sub_arena_create((usize)((Arena->size - Arena->used) / 2) - sizeof(usize), Arena);
     mem_arena ResultBuffer = sub_arena_create(Arena->size - Arena->used - sizeof(usize), Arena);
 
-    /* NOTE(Abid): Alignment to the 8 bytes of f64. */
+    /* NOTE(abid): Alignment to the 8 bytes of f64. */
     usize Alignment = sizeof(f64);
     Assert(ResultBuffer.size >= 2*sizeof(f64)*Alignment, "minimum size requirement for result buffer not met.");
     usize AlignmentMask = Alignment - 1;
@@ -152,7 +152,7 @@ GenerateHaversineJSON(u64 NumberPairs, u64 NumClusters, char *Filename, mem_aren
             f64 Lat2Start = RandRangeF64(-90., 90. - Lat2Size);
             f64 Lon2Start = RandRangeF64(-180., 180. - Lon2Size);
 
-            /* NOTE(Abid): In case we have remainders left. */
+            /* NOTE(abid): In case we have remainders left. */
             u64 NumToGenerate = ((ClusterIdx == NumClusters-1) && PairRemainder) ? PairRemainder
                                                                                  : NumPairPerCluster;
             for(u64 PairIdx = 0; PairIdx < NumToGenerate; PairIdx++) {
@@ -189,7 +189,9 @@ GenerateHaversineJSON(u64 NumberPairs, u64 NumClusters, char *Filename, mem_aren
 }
 
 i32 main() {
-    parse_json("test_out.json");
+    json_value *base_json = jp_json_load("..\\..\\test.json");
+    json_value *value1 = jp_dict_get(base_json, "key");
+    json_value *value1 = jp_list_get(value1, 3);
 
     return 0;
 }
@@ -204,7 +206,7 @@ i32 main(i32 argc, char* argv[]) {
     char* Filename = argv[4];
 
     RandSeed(Seed);
-    mem_arena *Arena = allocate_arena(Megabyte(1));
+    mem_arena *Arena = arena_allocate(Megabyte(1));
     stat_f64 GenerationStat = GenerateHaversineJSON(NumPairs, NumClusters, Filename, Arena);
     printf("Seed: %lld\nPair Count: %lld\nExpected Sum: %f\n\n",
             Seed, NumPairs, GenerationStat.Sum);

@@ -11,22 +11,17 @@
 typedef struct mem_arena mem_arena;
 struct mem_arena {
     usize used;
-    usize size;
+    usize size; /* NOTE(abid): Size of the memory we've committed */
+    usize max_size; /* NOTE(abid): Size of the memory we've reserved. */
     void *ptr;
     
-    u32 tempcount;
-    
-    mem_arena *next;
-    mem_arena *prev;
+    u32 temp_count;
 };
 
-typedef struct token token;
 typedef struct {
     mem_arena *arena;
-
-    token *token_list;
-    token *current_token;
-} memory;
+    usize used;
+} temp_memory;
 
 #define UTILS_H
 #endif

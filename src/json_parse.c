@@ -5,10 +5,107 @@
     |    Last Modified:                                                                |
     |                                                                                  |
     +======================================| Copyright © Sayed Abid Hashimi |==========+  */
+
 #include "json_parse.h"
 
+/* NOTE(abid): JSON list routines. */
+internal json_list *
+jp_list_create(usize array_count, parser_state *state) {
+    /* NOTE(abid): `array_count` should be the final size of the current array (non-growable). */
+    json_list *result = push_size(sizeof(json_list) + sizeof(json_value)*array_count, state->arena);
+    result->array = result + 1;
+    result->max_count = array_count;
+    result->count = 0;
+
+    return result;
+}
+
+internal void
+jp_list_add(json_list *list, void *content, json_value value) {
+    /* NOTE(abid): We expect the `list` to have enough space. */
+    /* TODO(abid): Implement the array properly so that the content of the array in the memory
+     *             is beside the array. For that, lexer must change to gather type information.
+     * - 24.Sep.2024 */
+    assert(result->count  < result->max_count, "cannot add, array full");
+    list.array[result->count] = value;
+}
+
+internal json_value *
+jp_list_get(json_list *list, usize index) {
+    assert(list->max_count > index, "index out of bound");
+    return list->array + index;
+}
+
+/* NOTE(abid): Dictionary routines. */
+inline internal json_dict *
+jp_dict_create(usize table_init_count, parser_state *current_memory) {
+    json_dict *result = push_size(sizeof(json_dict) + sizeof(dict_content)*table_init_count,
+                                  state->arena);
+    result->table = result + 1;
+    result->count = table_init_count;
+
+    return result;
+}
+
+internal void
+jp_dict_add(json_dict *dict, string key, void *content, json_value_type type, parser_state mem) {
+    /* NOTE(abid): We expect `key` and `content` be valid until end of program.
+     *             i.e. we won't do the allocation here. */
+    u32 hash = hash_from_string(key);
+    dict_content *slot = dict->table + (hash % dict->count);
+
+    /* NOTE(abid): Check for collision hits. */
+    dict_content *next_slot = slot;
+    for(;next_slot;) {
+        assert(string_is_equal(ckey, next_slot->key), "adding key duplicated.");
+        slot = next_slot;
+        next_slot = slot->next;
+    }
+    slot->next = push_struct(dict_content, mem);
+    slot = slot->next;
+
+    slot->key = ckey;
+    slot->value = value; 
+}
+
+internal json_value *
+jp_dict_get_value(json_dict *dict, char *key) {
+    u32 hash = hash_from_string(key);
+    dict_content *slot = dict->table + (hash % dict->table_count);
+
+    /* NOTE(abid): Check if object exist, as well as collision. */
+    for(;slot;) {
+        if(strcmp(slot->key, key) == 0) return slot->value;
+        slot = slot->new;
+    }
+
+    /* NOTE(abid): If we reach here, then we've gone and done it now. */
+    assert(0, "key %s not found.", key);
+}
+
+internal u32
+jp_hash_from_string(string str) {
+    u32 result = 0;
+    for(i32 idx = 0; idx < str.length; ++idx) {
+        result = ((result << 5) - result) + (u32)str.data[idx];
+    }
+    return result;
+}
+
+inline internal bool
+string_is_equal(string str1, string str2) {
+    if(str1.length != str2.length) return false;
+
+    for(u32 idx = 0; idx < str1.length; ++idx) {
+        if(str1.data[idx] != str2.data[idx]) return false;
+    }
+
+    return true;
+}
+
+/* NOTE(abid): String routines. */
 internal usize
-c_string_length(char *c_string) {
+cstring_length(char *c_string) {
     usize result = 0;
     while(*c_string++) ++result;
 
@@ -22,16 +119,17 @@ string_char(string str, usize idx) {
     return str.data[idx];
 }
 
-internal string
-to_string(char *c_string) {
+internal string_extende
+string_make(char *c_string) {
     return (string) {
         .data = c_string,
-        .length = c_string_length(c_string)
+        .length = cstring_length(c_string)
     };
 }
 
+/* NOTE(abid): Lexer routines. */
 internal inline token *
-buffer_push_token(token_type token_type, void *token_value, memory *token_memory) {
+buffer_push_token(token_type token_type, void *token_value, parser_state *token_memory) {
     token *new_token = push_struct(token, token_memory);
     new_token->type = token_type;
     new_token->body = token_value;
@@ -52,7 +150,7 @@ buffer_char(buffer *json_buffer) {
 
 internal inline void
 buffer_consume_until(buffer *json_buffer, char char_to_stop) {
-    /* NOTE(Abid): Excluding the char_to_stop. */
+    /* NOTE(abid): Excluding the char_to_stop. */
     char current_char = buffer_char(json_buffer); 
 
     while(current_char != char_to_stop) {
@@ -63,7 +161,7 @@ buffer_consume_until(buffer *json_buffer, char char_to_stop) {
 
 internal inline bool
 buffer_is_ignore(buffer *json_buffer) {
-    char current_char = string_char(json_buffer->str, json_buffer->current_idx);
+    char current_char = json_buffer->str[json_buffer->current_idx];
     return (current_char ==  ' ') ||
            (current_char == '\n') ||
            (current_char == '\t') ||
@@ -76,7 +174,7 @@ buffer_consume_ignores(buffer *json_buffer) {
 }
 
 internal void
-buffer_consume_extract_string(string *str, buffer *json_buffer) {
+buffer_to_cstring(string_value *str, buffer *json_buffer) {
     assert(buffer_char(json_buffer) == '"', "string must start with \"");
     buffer_consume(json_buffer); /* consume start quote */
     usize start_idx = json_buffer->current_idx;
@@ -84,26 +182,26 @@ buffer_consume_extract_string(string *str, buffer *json_buffer) {
     usize end_idx = json_buffer->current_idx;
     buffer_consume(json_buffer); /* consume end quote */
 
-    str->data = json_buffer->str.data + start_idx;
+    str->data = json_buffer->str + start_idx;
     str->length = end_idx - start_idx;
 }
 
 internal inline bool
 buffer_is_numeric(buffer *json_buffer) {
-    char current_char = buffer_char(json_buffer);
+    char current_char = json_buffer->str[json_buffer->current_idx];
     return ((current_char >= '0') && (current_char <= '9')) ||
            (current_char == '-') || (current_char == '+');
 }
 
 internal bool 
-buffer_consume_extract_numeric(string *str, buffer *json_buffer) {
-    /* NOTE(Abid): Assumes the current character is already a number. */
+buffer_consume_extract_numeric(string_value *str, buffer *json_buffer) {
+    /* NOTE(abid): Assumes the current character is already a number. */
     bool is_float = false;
 
     usize start_idx = json_buffer->current_idx;
     while(buffer_is_numeric(json_buffer)) {
         buffer_consume(json_buffer);
-        if(!is_float && buffer_char(json_buffer) == '.') {
+        if(!is_float && json_buffer->str[json_buffer->current_idx] == '.') {
             is_float = true;
             buffer_consume(json_buffer);
         }
@@ -115,44 +213,165 @@ buffer_consume_extract_numeric(string *str, buffer *json_buffer) {
     return is_float;
 }
 
+/* NOTE(abid): Okay, so we've decided that it would be better to go back to the old
+ * c-style string instead of this class, mainly because of how it should be used after
+ * the parsing is done. One would expect all strings to be null terminated, and c-library
+ * compliant. So making our own string library is @not a good idea here. 24.Sep.2024 */
 internal void
-lexer(buffer *json_buffer, memory *parser_memory) {
-    while(json_buffer->current_idx < json_buffer->str.length) {
+jp_lexer(buffer *json_buffer, parser_state *state) {
+    usize *content_bytes_size = 0;
+    while(json_buffer->str[json_buffer->current_idx]) {
         buffer_consume_ignores(json_buffer);
-        switch(buffer_char(json_buffer)) {
+        /* TODO(abid): Guard against using comma at the end of a scope. */
+        bool expect_element = false;
+
+        switch(json_buffer->str[json_buffer->current_idx]) {
             case '"': {
-                string *str = push_struct(string, parser_memory);
-                buffer_consume_extract_string(str, json_buffer);
+                /* TODO(abid): No support for Unicode - 24.Sep.2024 */
+                // string_value *str = push_struct(string_value, memory);
+                string_value *str_value = push_struct(string_value, state->arena)
+                buffer_to_cstring(str_value, json_buffer);
                 buffer_consume_ignores(json_buffer);
-                if(buffer_char(json_buffer) == ':') {
-                    /* NOTE(Abid): We have a key. */
-                    buffer_push_token(tt_key, (void *)str, parser_memory);
+                if(json_buffer->str[json_buffer->current_idx] == ':') {
+                    /* NOTE(abid): We have a key. */
+                    buffer_push_token(tt_key, (void *)str_value, state);
                     buffer_consume(json_buffer);
-                } else {
-                    buffer_push_token(tt_value_str, (void *)str, parser_memory);
-                }
+                } else buffer_push_token(tt_value_str, (void *)str_value, state);
+
+                content_bytes_size += str_value->length+1;
             } break;
-            case '{': { buffer_push_token(tt_dict_begin, 0, parser_memory); buffer_consume(json_buffer); } break;
-            case '}': { buffer_push_token(tt_dict_end,   0, parser_memory); buffer_consume(json_buffer); } break;
-            case '[': { buffer_push_token(tt_list_begin, 0, parser_memory); buffer_consume(json_buffer); } break;
-            case ']': { buffer_push_token(tt_list_end,   0, parser_memory); buffer_consume(json_buffer); } break;
-            case ',': { buffer_push_token(tt_comma,      0, parser_memory); buffer_consume(json_buffer); } break;
+            case '{': { 
+                buffer_push_token(tt_dict_begin, content_bytes_size, state);
+                buffer_consume(json_buffer); 
+
+                content_bytes_size += sizeof(json_dict);
+            } break;
+            case '[': { 
+                buffer_push_token(tt_list_begin, num_content, state);
+                buffer_consume(json_buffer);
+
+                content_bytes_size += sizeof(json_list);
+            } break;
+            case '}': { buffer_push_token(tt_dict_end,   0, state); buffer_consume(json_buffer); } break;
+            case ']': { buffer_push_token(tt_list_end,   0, _state); buffer_consume(json_buffer); } break;
+            case ',': { buffer_push_token(tt_comma, 0, state); buffer_consume(json_buffer); } break;
+            case '\0': { buffer_push_token(tt_eot, 0, state); buffer_consume(json_buffer); } break;
             case '\t':
             case '\n':
             case '\r':
             case ' ': { buffer_consume_ignores(json_buffer); } break;
             default: {
                 if(buffer_is_numeric(json_buffer)) {
-                    string *str = push_struct(string, parser_memory);
+                    string_value *str = push_struct(string, state);
                     bool is_float = buffer_consume_extract_numeric(str, json_buffer);
-                    if(is_float) buffer_push_token(tt_value_float, str, parser_memory);
-                    else buffer_push_token(tt_value_int, str, parser_memory);
+                    if(is_float) {
+                        /* NOTE(abid): Float is 64-bit. */
+                        buffer_push_token(tt_value_float, str, state);
+
+                        content_bytes_size += sizeof(f64);
+                    } else {
+                        /* NOTE(abid): Integer is 64-bit */
+                        buffer_push_token(tt_value_int, str, state);
+                        content_bytes_size += sizeof(i64);
+                    }
                 } else assert(0, "invalid path");
             }
         }
     }
 
-    parser_memory->current_token = parser_memory->token_list;
+    state->current_token = state->token_list;
+    state->content_bytes_size = content_bytes_size;
+}
+
+/* NOTE(abid): Parser routines. */
+#define parse_err(str, ...) fprintf(stderr, "parse error: " str "\n", __VA_ARGS__)
+#define parse_assert(expr, str, ...) \
+    if((expr)) { } \
+    else { \
+        parse_err(str, ##__VA_ARGS__); \
+        exit(EXIT_FAILURE); \
+    }
+
+inline internal void
+token_expect(token *tok, token_type tok_type) {
+    parse_assert(tok->type == tok_type, "expected token [%s], got [%s]\n",
+                  token_type_str[tok_type], token_type_str[tok->type]);
+}
+
+inline internal void
+token_advance(token **tok) { *tok = (*tok)->next; }
+
+internal token *
+token_peek(token *tok, usize forward_count) {
+    token *result = tok;
+    for(;forward_count != 0; --forward_count) {
+        result = result->next;
+    }
+
+    return result;
+}
+
+/* TODO(abid): We already know the size of the strings, with include keys as well,
+ * which means that we will be able to create @two arrays for dictionaries, one for keys
+ * and another for the values to be more efficient in our memory pattern. - 24.Sep.2024 */
+internal json_dict
+jp_parser(parser_state *state) {
+    token *current_token = state->token_list;
+    /* NOTE(abid): The initial tokens must dict_begin followed by a key. */
+    token_expect(current_token, tt_dict_begin);
+    token_expect(token_peek(current_token, 1), tt_key);
+
+    /* NOTE(abid): Push the entire required memory for json object at once. */
+    void *json_memory = push_size(state->content_bytes_size, state->arena);
+
+    /* NOTE(abid): Every allocation after this will be discard at its end. */
+    temp_memory temp_mem = mem_temp_begin(state->arena);
+
+    /* NOTE(abid): Current scope of the container we are in [json_list | json_dict]. */
+    linked_list *current_scope = NULL;
+
+    while(current_token->type != tt_eot) {
+        switch(current_token->type) {
+            case tt_dict_begin: {
+                json_dict *dict = (json_dict *)json_memory;
+                json_memory += sizeof(json_dict);
+
+                linked_list *ll = push_struct(linked_list, state->arena);
+                ll->content = dict;
+                ll->parent = current_scope;
+
+                parsed_json
+                token_advance(current_token);
+            } break;
+            case tt_dict_end: {
+            } break;
+            case tt_list_begin: {
+            } break;
+            case tt_list_end: {
+            } break;
+            case tt_comma: {
+            } break;
+            case tt_key: {
+                string *str = (string *)current_token->body;
+                token_advance(current_token);
+            } break;
+            case tt_value_float: {
+            } break;
+            case tt_value_int: {
+            } break;
+            case tt_value_str: {
+            } break;
+
+            default: assert(0, "invalid code path in parser");
+        }
+        token_advance(&current_token);
+    }
+    mem_temp_end(temp_mem);
+
+    parse_assert(dict_scope_value == 0, "mismatch in json object scope");
+    parse_assert(list_scope_value == 0, "mismatch in list scope");
+
+    return parsed_json;
 }
 
 internal buffer 
@@ -161,12 +380,12 @@ read_text_file(char *Filename) {
     FILE *FileHandle = NULL;
     fopen_s(&FileHandle, Filename, "rb");
 
-    /* NOTE(Abid): Get the size of the File */
+    /* NOTE(abid): Get the size of the File */
     fseek(FileHandle, 0, SEEK_END);
     usize FileSize = ftell(FileHandle);
     rewind(FileHandle);
 
-    /* NOTE(Abid): Read into the start of the main memory */
+    /* NOTE(abid): Read into the start of the main memory. */
     char* Content = platform_allocate(FileSize);
     if (Content == NULL) {
         fclose(FileHandle);
@@ -189,18 +408,13 @@ read_text_file(char *Filename) {
 }
 
 internal void
-parser(memory *parse_memory) {
-    *parse_memory;
-}
-
-internal void
-parse_json(char *Filename) {
+jp_load(char *Filename) {
     buffer Buffer = read_text_file(Filename);
-    memory parse_memory = {
+    parser_state state = {
         .arena = allocate_arena(Megabyte(10)),
         .token_list = NULL,
         .current_token = NULL
     };
-    lexer(&Buffer, &parse_memory);
-    parser(&parse_memory);
+    lexer(&Buffer, &state);
+    parser_parse(&state);
 }

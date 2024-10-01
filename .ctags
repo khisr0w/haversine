@@ -1,0 +1,9 @@
+--recurse=yes
+--exclude=binary
+--exclude=.git
+--exclude=*.json
+--exclude=*.f64
+--exclude=Makefile
+--exclude=LICENSE
+--exclude=doc
+--exclude=*.md

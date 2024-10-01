@@ -29,7 +29,7 @@ typedef int16_t i16;
 #define ArraySize(Arr) sizeof((Arr)) / sizeof((Arr)[0])
 #define Assert(Expr, ErrorStr) if(!(Expr)) { fprintf(stderr, "ASSERTION ERROR (%s:%d): " ErrorStr "\nExiting...\n", __FILE__, __LINE__); *(i32 *)0 = 0; }
 
-/* NOTE(Abid): Byte Macros */
+/* NOTE(abid): Byte Macros */
 #define Kilobyte(Value) ((Value)*1024LL)
 #define Megabyte(Value) (Kilobyte(Value)*1024LL)
 #define Gigabyte(Value) (Megabyte(Value)*1024LL)
@@ -81,10 +81,10 @@ global_var rand_state __GLOBALRandState = {
 
 inline internal void
 RandSeed(u64 Seed) {
-    /* NOTE(Abid): Reserve bits for U8 and U16 routines. */
+    /* NOTE(abid): Reserve bits for U8 and U16 routines. */
 
     __GLOBALRandState.V ^= Seed;
-    /* NOTE(Abid): RandU64() routine here. */
+    /* NOTE(abid): RandU64() routine here. */
     __GLOBALRandState.V ^= __GLOBALRandState.V >> 21;
     __GLOBALRandState.V ^= __GLOBALRandState.V << 35;
     __GLOBALRandState.V ^= __GLOBALRandState.V >> 4;
@@ -99,8 +99,8 @@ RandU64() {
     return __GLOBALRandState.V * 2685821657736338717LL;
 }
 
-/* NOTE(Abid): Range in [Min, Max) */
-/* TODO(Abid): Get rid of modulus in here (faster). */
+/* NOTE(abid): Range in [Min, Max) */
+/* TODO(abid): Get rid of modulus in here (faster). */
 inline internal u64
 RandRangeU64(u64 Min, u64 Max) { return Min + RandU64() % (Max-Min); }
 
@@ -126,7 +126,7 @@ inline internal u8 RandU8() {
 inline internal f64
 RandF64() { return 5.42101086242752217e-20 * (f64)RandU64(); }
 
-/* NOTE(Abid): Range [Min, Max] */
+/* NOTE(abid): Range [Min, Max] */
 inline internal f64
 RandRangeF64(f64 Min, f64 Max) { return Min + RandF64() * (Max - Min); }
 
