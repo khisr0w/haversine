@@ -77,7 +77,7 @@ typedef struct {
  * will be looking up a key and then immediately getting the value. So this reduces cache misses.
  * - 28.Sep.2024 */
 typedef struct {
-    string key;
+    char *key;
     json_value *value;
 
     dict_content *next;
@@ -86,12 +86,13 @@ typedef struct {
 typedef struct {
     dict_content *table;
     usize count;
+    usize content_size; // size of `table` in bytes, used for jumping over this structure
 } json_dict;
 
 typedef struct {
     json_value *array;
     usize count;
-    usize max_count;
+    usize content_size; // size of `table` in bytes, used for jumping over this structure
 } json_list;
 
 typedef struct {

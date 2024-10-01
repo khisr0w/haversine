@@ -244,21 +244,21 @@ jp_lexer(buffer *json_buffer, parser_state *state) {
                 buffer_push_token(tt_dict_begin, content_bytes_size, state);
                 buffer_consume(json_buffer); 
 
-                content_bytes_size += sizeof(json_dict);
+                content_bytes_size += sizeof(json_value) + sizeof(json_dict);
             } break;
             case '[': { 
                 buffer_push_token(tt_list_begin, num_content, state);
                 buffer_consume(json_buffer);
 
-                content_bytes_size += sizeof(json_list);
+                content_bytes_size += sizeof(json_value) + sizeof(json_list);
             } break;
             case '}': { buffer_push_token(tt_dict_end,   0, state); buffer_consume(json_buffer); } break;
             case ']': { buffer_push_token(tt_list_end,   0, _state); buffer_consume(json_buffer); } break;
-            case ',': { buffer_push_token(tt_comma, 0, state); buffer_consume(json_buffer); } break;
             case '\0': { buffer_push_token(tt_eot, 0, state); buffer_consume(json_buffer); } break;
             case '\t':
             case '\n':
             case '\r':
+            case ',':
             case ' ': { buffer_consume_ignores(json_buffer); } break;
             default: {
                 if(buffer_is_numeric(json_buffer)) {
@@ -323,35 +323,59 @@ jp_parser(parser_state *state) {
 
     /* NOTE(abid): Push the entire required memory for json object at once. */
     void *json_memory = push_size(state->content_bytes_size, state->arena);
+    json_dict *json_root = json_memory;
 
     /* NOTE(abid): Every allocation after this will be discard at its end. */
     temp_memory temp_mem = mem_temp_begin(state->arena);
 
     /* NOTE(abid): Current scope of the container we are in [json_list | json_dict]. */
     linked_list *current_scope = NULL;
-
     while(current_token->type != tt_eot) {
         switch(current_token->type) {
             case tt_dict_begin: {
-                json_dict *dict = (json_dict *)json_memory;
-                json_memory += sizeof(json_dict);
+                json_value *value;
+                /* NOTE(abid): Check if we are at the root dictionary or not. */
+                if(current_scope == NULL) value = (json_value *)json_memory;
+                else value = (json_value *)current_scope->content;
 
+                json_memory += sizeof(json_value) + sizeof(json_dict);
+                dict->type = jvt_dict;
                 linked_list *ll = push_struct(linked_list, state->arena);
-                ll->content = dict;
+                ll->content = value;
                 ll->parent = current_scope;
+                current_scope = ll;
 
-                parsed_json
-                token_advance(current_token);
-            } break;
-            case tt_dict_end: {
+                json_dict *dict = value + 1;
+                dict->table = json_memory;
+                dict->count = 0;
+                dict->content_size = 0;
             } break;
             case tt_list_begin: {
+                parse_assert(current_scope == NULL, "a list cannot be the first scope in JSON");
+                json_value *value = (json_value *)current_scope->content;
+                json_memory += sizeof(json_value) + sizeof(json_list);
+
+                linked_list *ll = push_struct(linked_list, state->arena);
+                ll->content = value;
+                ll->parent = current_scope;
+                current_scope = ll;
+
+                json_list *lst = value + 1;
+                dict->array = json_memory;
+                dict->count = 0;
+                dict->content_size = 0;
             } break;
             case tt_list_end: {
-            } break;
-            case tt_comma: {
+            case tt_dict_end: {
+                parse_assert(current_scope != NULL, "unexpected closing of scope, did you enter an extra }/]?");
+                current_scope = current_scope->parent;
             } break;
             case tt_key: {
+                is_dict = ((json_value *)current_scope->content)->type == jvt_dict
+                parse_assert(is_dict, "unexpected key inside a non-dictionary scope");
+
+                string_value *string = (string_value *)current_token->body;
+                memcpy(string->data, json_memory, string->length);
                 string *str = (string *)current_token->body;
                 token_advance(current_token);
             } break;
