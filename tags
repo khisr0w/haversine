@@ -11,7 +11,7 @@ Assert	.\src\main.h	30;"	d
 Count	.\src\main.h	/^    u64 Count;$/;"	m	struct:__anon11
 GenerateHaversineJSON	.\src\main.c	/^GenerateHaversineJSON(u64 NumberPairs, u64 NumClusters, char *Filename, mem_arena *Arena) {$/;"	f
 Gigabyte	.\src\main.h	35;"	d
-JSON_PARSE_H	.\src\json_parse.h	105;"	d
+JSON_PARSE_H	.\src\json_parse.h	106;"	d
 Kilobyte	.\src\main.h	33;"	d
 Latest	.\src\main.h	/^    f64 Latest;$/;"	m	struct:__anon11
 MAIN_H	.\src\main.h	133;"	d
@@ -71,6 +71,8 @@ buffer_push_token	.\src\json_parse.c	/^buffer_push_token(token_type token_type, 
 buffer_to_cstring	.\src\json_parse.c	/^buffer_to_cstring(string_value *str, buffer *json_buffer) {$/;"	f
 content	.\src\json_parse.h	/^    json_value *content;$/;"	m	struct:__anon1
 content_bytes_size	.\src\json_parse.h	/^    u64 content_bytes_size;$/;"	m	struct:__anon10
+content_size	.\src\json_parse.h	/^    usize content_size; \/\/ size of `table` in bytes, used for jumping over this structure$/;"	m	struct:__anon8
+content_size	.\src\json_parse.h	/^    usize content_size; \/\/ size of `table` in bytes, used for jumping over this structure$/;"	m	struct:__anon9
 count	.\src\json_parse.h	/^    usize count;$/;"	m	struct:__anon8
 count	.\src\json_parse.h	/^    usize count;$/;"	m	struct:__anon9
 cstring_length	.\src\json_parse.c	/^cstring_length(char *c_string) {$/;"	f
@@ -95,7 +97,6 @@ jp_lexer	.\src\json_parse.c	/^jp_lexer(buffer *json_buffer, parser_state *state)
 jp_list_add	.\src\json_parse.c	/^jp_list_add(json_list *list, void *content, json_value value) {$/;"	f
 jp_list_create	.\src\json_parse.c	/^jp_list_create(usize array_count, parser_state *state) {$/;"	f
 jp_list_get	.\src\json_parse.c	/^jp_list_get(json_list *list, usize index) {$/;"	f
-jp_load	.\src\json_parse.c	/^jp_load(char *Filename) {$/;"	f
 jp_parser	.\src\json_parse.c	/^jp_parser(parser_state *state) {$/;"	f
 json_dict	.\src\json_parse.h	/^} json_dict;$/;"	t	typeref:struct:__anon8
 json_list	.\src\json_parse.h	/^} json_list;$/;"	t	typeref:struct:__anon9
@@ -106,12 +107,11 @@ jvt_float	.\src\json_parse.h	/^    jvt_float,$/;"	e	enum:__anon5
 jvt_int	.\src\json_parse.h	/^    jvt_int,$/;"	e	enum:__anon5
 jvt_list	.\src\json_parse.h	/^    jvt_list,$/;"	e	enum:__anon5
 jvt_str	.\src\json_parse.h	/^    jvt_str,$/;"	e	enum:__anon5
-key	.\src\json_parse.h	/^    string key;$/;"	m	struct:__anon7
+key	.\src\json_parse.h	/^    char *key;$/;"	m	struct:__anon7
 length	.\src\json_parse.h	/^    usize length;$/;"	m	struct:__anon2
 linked_list	.\src\json_parse.h	/^} linked_list;$/;"	t	typeref:struct:__anon1
 local_persist	.\src\main.h	25;"	d
 main	.\src\main.c	/^i32 main() {$/;"	f
-max_count	.\src\json_parse.h	/^    usize max_count;$/;"	m	struct:__anon9
 max_size	.\src\utils.h	/^    usize max_size; \/* NOTE(abid): Size of the memory we've reserved. *\/$/;"	m	struct:mem_arena
 mem_arena	.\src\utils.h	/^struct mem_arena {$/;"	s
 mem_arena	.\src\utils.h	/^typedef struct mem_arena mem_arena;$/;"	t	typeref:struct:mem_arena
@@ -131,7 +131,6 @@ push_array	.\src\utils.c	141;"	d	file:
 push_size	.\src\utils.c	/^push_size(usize size, mem_arena *arena) {$/;"	f
 push_struct	.\src\utils.c	140;"	d	file:
 rand_state	.\src\main.h	/^} rand_state;$/;"	t	typeref:struct:__anon12
-read_text_file	.\src\json_parse.c	/^read_text_file(char *Filename) {$/;"	f
 size	.\src\utils.h	/^    usize size; \/* NOTE(abid): Size of the memory we've committed *\/$/;"	m	struct:mem_arena
 stat_f64	.\src\main.h	/^} stat_f64;$/;"	t	typeref:struct:__anon11
 str	.\src\json_parse.h	/^    char *str;$/;"	m	struct:__anon3
