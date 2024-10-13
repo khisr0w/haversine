@@ -76,7 +76,8 @@ typedef struct {
 /* NOTE(abid): At the moment, we are putting key and value close in memory, since most of our ops
  * will be looking up a key and then immediately getting the value. So this reduces cache misses.
  * - 28.Sep.2024 */
-typedef struct {
+typedef struct dict_content dict_content;
+struct {
     char *key;
     json_value *value;
 
@@ -84,15 +85,17 @@ typedef struct {
 } dict_content;
 
 typedef struct {
-    dict_content *table;
-    usize count;
-    usize content_size; // size of `table` in bytes, used for jumping over this structure
+    usize content_size; // size of the content of `table` in bytes, used for jumping over this structure
+
+    usize table_count = 1024*1024; // count of `table` structure, used for hash function modulus
+    dict_content *table[1024*1024];
 } json_dict;
 
 typedef struct {
-    json_value *array;
     usize count;
-    usize content_size; // size of `table` in bytes, used for jumping over this structure
+    usize content_size; // size of `array` in bytes, used for jumping over this structure
+
+    json_value *array;
 } json_list;
 
 typedef struct {
@@ -100,7 +103,7 @@ typedef struct {
 
     token *token_list;
     token *current_token;
-    u64 content_bytes_size;
+    usize global_bytes_size;
 } parser_state;
 
 #define JSON_PARSE_H

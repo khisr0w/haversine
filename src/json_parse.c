@@ -6,7 +6,194 @@
     |                                                                                  |
     +======================================| Copyright © Sayed Abid Hashimi |==========+  */
 
+/* NOTE(abid):
+ * Dictionary memory layout:
+ * - table
+ *   - void *
+ *   - void *
+ *   ...
+ *
+ * - dict_content
+ * - dict_content
+ *   ...
+ *
+   NOTE(abid): 
+ * List memory layout:
+ * - json_value
+ * - json_value
+ *   ...
+ */
+
 #include "json_parse.h"
+
+/* NOTE(abid): Lexer routines. */
+internal inline token *
+buffer_push_token(token_type token_type, void *token_value, parser_state *state) {
+    token *new_token = push_struct(token, state->arena);
+    new_token->type = token_type;
+    new_token->body = token_value;
+
+    if(state->token_list == NULL) state->token_list = new_token;
+    else state->current_token->next = new_token;
+    state->current_token = new_token;
+
+    return new_token;
+}
+internal inline void
+buffer_consume(buffer *json_buffer) { ++json_buffer->current_idx; }
+
+internal inline char
+buffer_char(buffer *json_buffer) {
+    return string_char(json_buffer->str, json_buffer->current_idx);
+}
+
+internal inline void
+buffer_consume_until(buffer *json_buffer, char char_to_stop) {
+    /* NOTE(abid): Excluding the char_to_stop. */
+    char current_char = buffer_char(json_buffer); 
+
+    while(current_char != char_to_stop) {
+        buffer_consume(json_buffer);
+        current_char = buffer_char(json_buffer); 
+    }
+}
+
+internal inline bool
+buffer_is_ignore(buffer *json_buffer) {
+    char current_char = json_buffer->str[json_buffer->current_idx];
+    return (current_char ==  ' ') ||
+           (current_char == '\n') ||
+           (current_char == '\t') ||
+           (current_char == '\r');
+}
+
+internal inline void
+buffer_consume_ignores(buffer *json_buffer) {
+    while(buffer_is_ignore(json_buffer)) buffer_consume(json_buffer);
+}
+
+internal void
+buffer_to_cstring(string_value *str, buffer *json_buffer) {
+    assert(buffer_char(json_buffer) == '"', "string must start with \"");
+    buffer_consume(json_buffer); /* consume start quote */
+    usize start_idx = json_buffer->current_idx;
+    buffer_consume_until(json_buffer, '"');
+    usize end_idx = json_buffer->current_idx;
+    buffer_consume(json_buffer); /* consume end quote */
+
+    str->data = json_buffer->str + start_idx;
+    str->length = end_idx - start_idx;
+}
+
+internal inline bool
+buffer_is_numeric(buffer *json_buffer) {
+    char current_char = json_buffer->str[json_buffer->current_idx];
+    return ((current_char >= '0') && (current_char <= '9')) ||
+           (current_char == '-') || (current_char == '+');
+}
+
+internal bool 
+buffer_consume_extract_numeric(string_value *str, buffer *json_buffer) {
+    /* NOTE(abid): Assumes the current character is already a number. */
+    bool is_float = false;
+
+    usize start_idx = json_buffer->current_idx;
+    while(buffer_is_numeric(json_buffer)) {
+        buffer_consume(json_buffer);
+        if(!is_float && json_buffer->str[json_buffer->current_idx] == '.') {
+            is_float = true;
+            buffer_consume(json_buffer);
+        }
+    }
+    usize end_idx = json_buffer->current_idx;
+    str->data = json_buffer->str.data + start_idx;
+    str->length = end_idx - start_idx;
+
+    return is_float;
+}
+
+/* NOTE(abid): Okay, so we've decided that it would be better to go back to the old
+ * c-style string instead of a custom struct, mainly because of how it should be used after
+ * the parsing is done. One would expect all strings to be null terminated, and c-library
+ * compliant. So making our own string library is @not a good idea here. 24.Sep.2024 */
+internal void
+jp_lexer(buffer *json_buffer, parser_state *state) {
+    while(json_buffer->str[json_buffer->current_idx]) {
+        buffer_consume_ignores(json_buffer);
+        /* TODO(abid): Guard against using comma at the end of a scope. */
+        bool expect_element = false;
+
+        switch(json_buffer->str[json_buffer->current_idx]) {
+            case '"': {
+                /* TODO(abid): No support for Unicode - 24.Sep.2024 */
+                // string_value *str = push_struct(string_value, memory);
+                string_value *str_value = push_struct(string_value, state->arena)
+                buffer_to_cstring(str_value, json_buffer);
+                buffer_consume_ignores(json_buffer);
+                if(json_buffer->str[json_buffer->current_idx] == ':') {
+                    /* NOTE(abid): We have a key. */
+                    buffer_push_token(tt_key, (void *)str_value, state);
+                    buffer_consume(json_buffer);
+                } else buffer_push_token(tt_value_str, (void *)str_value, state);
+
+                state->global_bytes_size += str_value->length+1;
+            } break;
+            case '{': { 
+                buffer_push_token(tt_dict_begin, content_bytes_size, state);
+                buffer_consume(json_buffer); 
+
+                state->global_bytes_size += sizeof(json_value) + sizeof(json_dict);
+            } break;
+            case '[': { 
+                buffer_push_token(tt_list_begin, num_content, state);
+                buffer_consume(json_buffer);
+
+                state->global_bytes_size += sizeof(json_value) + sizeof(json_list);
+            } break;
+            case '}': { buffer_push_token(tt_dict_end,   0, state); buffer_consume(json_buffer); } break;
+            case ']': { buffer_push_token(tt_list_end,   0, _state); buffer_consume(json_buffer); } break;
+            case '\0': { buffer_push_token(tt_eot, 0, state); buffer_consume(json_buffer); } break;
+            case '\t':
+            case '\n':
+            case '\r':
+            case ',':
+            case ' ': { buffer_consume_ignores(json_buffer); } break;
+            default: {
+                if(buffer_is_numeric(json_buffer)) {
+                    string_value *str = push_struct(string, state);
+                    bool is_float = buffer_consume_extract_numeric(str, json_buffer);
+                    if(is_float) {
+                        /* NOTE(abid): Float is 64-bit. */
+                        buffer_push_token(tt_value_float, str, state);
+
+                        state->global_bytes_size += sizeof(f64);
+                    } else {
+                        /* NOTE(abid): Integer is 64-bit */
+                        buffer_push_token(tt_value_int, str, state);
+                        state->global_bytes_size += sizeof(i64);
+                    }
+                } else assert(0, "invalid path");
+            }
+        }
+    }
+
+    state->current_token = state->token_list;
+    state->content_bytes_size = content_bytes_size;
+}
+
+internal usize
+hash_from_string(char *string) {
+    /* NOTE(abid): Adapted from `https://stackoverflow.com/questions/7616461/generate-a-hash-from-string-in-javascript` */ 
+    string_len = cstring_length(string)
+    usize hash = 0;
+    if(string_len == 0) return hash;
+
+    for(usize idx; idx < string_len; ++string_len) {
+        char chr = string[idx];
+        hash = ((hash << 5) - hash) + chr;
+    }
+    return hash;
+}
 
 /* NOTE(abid): JSON list routines. */
 internal json_list *
@@ -48,7 +235,7 @@ jp_dict_create(usize table_init_count, parser_state *current_memory) {
 }
 
 internal void
-jp_dict_add(json_dict *dict, string key, void *content, json_value_type type, parser_state mem) {
+jp_dict_add(json_dict *dict, string_value key, void *content, json_value_type type, parser_state mem) {
     /* NOTE(abid): We expect `key` and `content` be valid until end of program.
      *             i.e. we won't do the allocation here. */
     u32 hash = hash_from_string(key);
@@ -127,164 +314,7 @@ string_make(char *c_string) {
     };
 }
 
-/* NOTE(abid): Lexer routines. */
-internal inline token *
-buffer_push_token(token_type token_type, void *token_value, parser_state *token_memory) {
-    token *new_token = push_struct(token, token_memory);
-    new_token->type = token_type;
-    new_token->body = token_value;
-
-    if(token_memory->token_list == NULL) token_memory->token_list = new_token;
-    else token_memory->current_token->next = new_token;
-    token_memory->current_token = new_token;
-
-    return new_token;
-}
-internal inline void
-buffer_consume(buffer *json_buffer) { ++json_buffer->current_idx; }
-
-internal inline char
-buffer_char(buffer *json_buffer) {
-    return string_char(json_buffer->str, json_buffer->current_idx);
-}
-
-internal inline void
-buffer_consume_until(buffer *json_buffer, char char_to_stop) {
-    /* NOTE(abid): Excluding the char_to_stop. */
-    char current_char = buffer_char(json_buffer); 
-
-    while(current_char != char_to_stop) {
-        buffer_consume(json_buffer);
-        current_char = buffer_char(json_buffer); 
-    }
-}
-
-internal inline bool
-buffer_is_ignore(buffer *json_buffer) {
-    char current_char = json_buffer->str[json_buffer->current_idx];
-    return (current_char ==  ' ') ||
-           (current_char == '\n') ||
-           (current_char == '\t') ||
-           (current_char == '\r');
-}
-
-internal inline void
-buffer_consume_ignores(buffer *json_buffer) {
-    while(buffer_is_ignore(json_buffer)) buffer_consume(json_buffer);
-}
-
-internal void
-buffer_to_cstring(string_value *str, buffer *json_buffer) {
-    assert(buffer_char(json_buffer) == '"', "string must start with \"");
-    buffer_consume(json_buffer); /* consume start quote */
-    usize start_idx = json_buffer->current_idx;
-    buffer_consume_until(json_buffer, '"');
-    usize end_idx = json_buffer->current_idx;
-    buffer_consume(json_buffer); /* consume end quote */
-
-    str->data = json_buffer->str + start_idx;
-    str->length = end_idx - start_idx;
-}
-
-internal inline bool
-buffer_is_numeric(buffer *json_buffer) {
-    char current_char = json_buffer->str[json_buffer->current_idx];
-    return ((current_char >= '0') && (current_char <= '9')) ||
-           (current_char == '-') || (current_char == '+');
-}
-
-internal bool 
-buffer_consume_extract_numeric(string_value *str, buffer *json_buffer) {
-    /* NOTE(abid): Assumes the current character is already a number. */
-    bool is_float = false;
-
-    usize start_idx = json_buffer->current_idx;
-    while(buffer_is_numeric(json_buffer)) {
-        buffer_consume(json_buffer);
-        if(!is_float && json_buffer->str[json_buffer->current_idx] == '.') {
-            is_float = true;
-            buffer_consume(json_buffer);
-        }
-    }
-    usize end_idx = json_buffer->current_idx;
-    str->data = json_buffer->str.data + start_idx;
-    str->length = end_idx - start_idx;
-
-    return is_float;
-}
-
-/* NOTE(abid): Okay, so we've decided that it would be better to go back to the old
- * c-style string instead of this class, mainly because of how it should be used after
- * the parsing is done. One would expect all strings to be null terminated, and c-library
- * compliant. So making our own string library is @not a good idea here. 24.Sep.2024 */
-internal void
-jp_lexer(buffer *json_buffer, parser_state *state) {
-    usize *content_bytes_size = 0;
-    while(json_buffer->str[json_buffer->current_idx]) {
-        buffer_consume_ignores(json_buffer);
-        /* TODO(abid): Guard against using comma at the end of a scope. */
-        bool expect_element = false;
-
-        switch(json_buffer->str[json_buffer->current_idx]) {
-            case '"': {
-                /* TODO(abid): No support for Unicode - 24.Sep.2024 */
-                // string_value *str = push_struct(string_value, memory);
-                string_value *str_value = push_struct(string_value, state->arena)
-                buffer_to_cstring(str_value, json_buffer);
-                buffer_consume_ignores(json_buffer);
-                if(json_buffer->str[json_buffer->current_idx] == ':') {
-                    /* NOTE(abid): We have a key. */
-                    buffer_push_token(tt_key, (void *)str_value, state);
-                    buffer_consume(json_buffer);
-                } else buffer_push_token(tt_value_str, (void *)str_value, state);
-
-                content_bytes_size += str_value->length+1;
-            } break;
-            case '{': { 
-                buffer_push_token(tt_dict_begin, content_bytes_size, state);
-                buffer_consume(json_buffer); 
-
-                content_bytes_size += sizeof(json_value) + sizeof(json_dict);
-            } break;
-            case '[': { 
-                buffer_push_token(tt_list_begin, num_content, state);
-                buffer_consume(json_buffer);
-
-                content_bytes_size += sizeof(json_value) + sizeof(json_list);
-            } break;
-            case '}': { buffer_push_token(tt_dict_end,   0, state); buffer_consume(json_buffer); } break;
-            case ']': { buffer_push_token(tt_list_end,   0, _state); buffer_consume(json_buffer); } break;
-            case '\0': { buffer_push_token(tt_eot, 0, state); buffer_consume(json_buffer); } break;
-            case '\t':
-            case '\n':
-            case '\r':
-            case ',':
-            case ' ': { buffer_consume_ignores(json_buffer); } break;
-            default: {
-                if(buffer_is_numeric(json_buffer)) {
-                    string_value *str = push_struct(string, state);
-                    bool is_float = buffer_consume_extract_numeric(str, json_buffer);
-                    if(is_float) {
-                        /* NOTE(abid): Float is 64-bit. */
-                        buffer_push_token(tt_value_float, str, state);
-
-                        content_bytes_size += sizeof(f64);
-                    } else {
-                        /* NOTE(abid): Integer is 64-bit */
-                        buffer_push_token(tt_value_int, str, state);
-                        content_bytes_size += sizeof(i64);
-                    }
-                } else assert(0, "invalid path");
-            }
-        }
-    }
-
-    state->current_token = state->token_list;
-    state->content_bytes_size = content_bytes_size;
-}
-
-/* NOTE(abid): Parser routines. */
-#define parse_err(str, ...) fprintf(stderr, "parse error: " str "\n", __VA_ARGS__)
+/* NOTE(abid): Parser routines. */ #define parse_err(str, ...) fprintf(stderr, "parse error: " str "\n", __VA_ARGS__)
 #define parse_assert(expr, str, ...) \
     if((expr)) { } \
     else { \
@@ -311,6 +341,19 @@ token_peek(token *tok, usize forward_count) {
     return result;
 }
 
+internal dict_content **
+jp_dict_get_empty(json_dict *dict, char *string) {
+    u32 hash = hash_from_string(string);
+    dict_content *slot = dict->table + (hash % dict->table_count);
+
+    /* NOTE(abid): Check for collision */
+    if(slot == NULL) return slot;
+    do { slot = slot->next; } while(slot);
+
+    return &slot;
+}
+
+
 /* TODO(abid): We already know the size of the strings, with include keys as well,
  * which means that we will be able to create @two arrays for dictionaries, one for keys
  * and another for the values to be more efficient in our memory pattern. - 24.Sep.2024 */
@@ -336,7 +379,10 @@ jp_parser(parser_state *state) {
                 json_value *value;
                 /* NOTE(abid): Check if we are at the root dictionary or not. */
                 if(current_scope == NULL) value = (json_value *)json_memory;
-                else value = (json_value *)current_scope->content;
+                else {
+                    json_dict dict = (json_dict *)(current_scope->content + 1);
+                    // dict_content **content = jp_dict_get_empty(dict, );
+                }
 
                 json_memory += sizeof(json_value) + sizeof(json_dict);
                 dict->type = jvt_dict;
