@@ -49,8 +49,8 @@ platform_ram_size_get() {
     GlobalMemoryStatusEx(&mem_stat);
     return mem_stat.ullTotalPhys;
 #elif PLT_LINUX
-    /* TODO(abid): Implement `platform_get_ram_size()` for linux. */
-    assert_static(0);
+    /* TODO(abid): Implement for linux. */
+    assert_static(0, "not implemented for linux");
 #endif
 }
 
@@ -122,8 +122,10 @@ mem_temp_end(temp_memory temp_mem) {
  * TODO: We are not keeping track of the committed pages yet, which means we have no way of
  * shrinking the memory. Figure out if the added computation is worth it. - 28.Sep.2024 */
 internal mem_arena *
-arena_create(usize bytes_to_allocate) {
-    usize physical_mem_max_size = platform_ram_size_get();
+arena_create(usize bytes_to_allocate, usize bytes_to_reserve) {
+    usize physical_mem_max_size = bytes_to_reserve;
+    if(bytes_to_reserve == 0) physical_mem_max_size = platform_ram_size_get();
+    
     void *base_addr = platform_reserve(physical_mem_max_size);
     mem_arena *arena = platform_commit(base_addr, sizeof(mem_arena) + bytes_to_allocate);
     /* TODO(abid): Probably need to remove this, most OS already zero out the memory. Investigate. */
@@ -143,10 +145,10 @@ internal void *
 push_size(usize size, mem_arena *arena) {
     /* NOTE(abid): If out of memory commit more memory. */
     if(arena->used + size >= arena->size) {
-        assert(arena->used + size < physical_mem_max_size, "out of memory. Sorry.");
+        assert(arena->used + size < arena->max_size, "out of memory. Sorry.");
 
         u64 size_to_allocate = (arena->alloc_stride > size) ? arena->alloc_stride : size;
-        platform_commit(arena->ptr + size, size_to_allocate);
+        platform_commit((u8 *)arena->ptr + size, size_to_allocate);
     }
 
     void *result = (u8 *)arena->ptr + arena->used;
@@ -169,12 +171,14 @@ push_size_arena(mem_arena *Arena, usize Size){
 #define ArenaCurrent(Arena) (void *)((u8 *)(Arena)->ptr + (Arena)->used)
 #define ArenaAdvance(Arena, Number, Type) (Arena)->used += sizeof(Type)*(Number)
 
+#if 0
 inline internal mem_arena
 sub_arena_create(usize size, mem_arena *arena) {
-    mem_arena SubArena = {0};
+    mem_arena sub_arena = {0};
     sub_arena.size = size;
     sub_arena.ptr = push_size_arena(arena, sub_arena.size);
     sub_arena.used = 0;
 
     return sub_arena;
 }
+#endif

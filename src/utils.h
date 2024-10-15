@@ -13,6 +13,7 @@ struct mem_arena {
     usize used;
     usize size; /* NOTE(abid): Size of the memory we've committed */
     usize max_size; /* NOTE(abid): Size of the memory we've reserved. */
+    usize alloc_stride;
     void *ptr;
     
     u32 temp_count;

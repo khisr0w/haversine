@@ -14,7 +14,7 @@
 #include "main.h"
 #include "utils.c"
 #include "json_parse.c"
-/* NOTE(abid): @23.09.2024*/
+
 /* NOTE(abid): EarthRadius is generally expected to be 6372.8 */
 internal f64
 ReferenceHaversine(f64 X0, f64 Y0, f64 X1, f64 Y1, f64 EarthRadius) {
@@ -104,8 +104,8 @@ GenerateHaversineJSON(u64 NumberPairs, u64 NumClusters, char *Filename, mem_aren
     char *F64Extension = ".f64";
     u64 JSONExtensionLen = StrLen(JSONExtension);
     u64 F64ExtensionLen = StrLen(F64Extension);
-    char *JSONFilename = push_size(Arena, FilenameLen + JSONExtensionLen + 1);
-    char *F64Filename = push_size(Arena, FilenameLen + F64ExtensionLen + 1);
+    char *JSONFilename = push_size(FilenameLen + JSONExtensionLen + 1, Arena);
+    char *F64Filename = push_size(FilenameLen + F64ExtensionLen + 1, Arena);
 
     for(u64 Idx = 0; Idx < FilenameLen; ++Idx) {
         JSONFilename[Idx] = Filename[Idx];

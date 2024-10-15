@@ -10,10 +10,13 @@
 
 #if !defined(JSON_PARSE_H)
 
-typedef struct {
-    json_value *content;
-    linked_list *parent;
-} linked_list;
+/* NOTE(abid): Parser routines. */ #define parse_err(str, ...) fprintf(stderr, "parse error: " str "\n", __VA_ARGS__)
+#define parse_assert(expr, str, ...) \
+    if((expr)) { } \
+    else { \
+        parse_err(str, ##__VA_ARGS__); \
+        exit(EXIT_FAILURE); \
+    }
 
 typedef struct {
     char *data;
@@ -68,43 +71,46 @@ typedef enum {
 } json_value_type;
 
 /* NOTE(abid): This is just a stub used to define the type of the value. Once the type is known
- * one can `+= sizeof(json_value)` to get the actual content. - 28.Sep.2024 */
+ * one can `+= sizeof(json_value)` to get the actual json value. - 28.Sep.2024 */
 typedef struct {
     json_value_type type;
 } json_value;
 
-/* NOTE(abid): At the moment, we are putting key and value close in memory, since most of our ops
- * will be looking up a key and then immediately getting the value. So this reduces cache misses.
- * - 28.Sep.2024 */
-typedef struct dict_content dict_content;
-struct {
+typedef struct {
     char *key;
     json_value *value;
-
-    dict_content *next;
-} dict_content;
+} dict_kv;
 
 typedef struct {
-    usize content_size; // size of the content of `table` in bytes, used for jumping over this structure
-
-    usize table_count = 1024*1024; // count of `table` structure, used for hash function modulus
-    dict_content *table[1024*1024];
+    usize count; // count of `table` structure, used for hash function modulus
+    dict_kv *table;
 } json_dict;
 
 typedef struct {
     usize count;
-    usize content_size; // size of `array` in bytes, used for jumping over this structure
-
-    json_value *array;
+    json_value **array;
 } json_list;
 
 typedef struct {
-    mem_arena *arena;
+    json_dict *json;
 
+    mem_arena *temp_arena;
     token *token_list;
     token *current_token;
     usize global_bytes_size;
 } parser_state;
 
+
+/* NOTE(abid): Structure is used exclusively during the parsing process and is not part of final JSON.
+ * - 14.Oct.2024 */
+typedef struct json_scope json_scope;
+struct json_scope {
+    json_value *content;
+    union {
+        usize idx; // Index to be used in the context, set by routine to track dict and list free boundary.
+        usize count; // Used with lexer, to keep count of a scope (dict/list)
+    };
+    json_scope *parent;
+};
 #define JSON_PARSE_H
 #endif

@@ -19,7 +19,9 @@
  *
    NOTE(abid): 
  * List memory layout:
+ * - void *
  * - json_value
+ * - void *
  * - json_value
  *   ...
  */
@@ -29,7 +31,7 @@
 /* NOTE(abid): Lexer routines. */
 internal inline token *
 buffer_push_token(token_type token_type, void *token_value, parser_state *state) {
-    token *new_token = push_struct(token, state->arena);
+    token *new_token = push_struct(token, state->temp_arena);
     new_token->type = token_type;
     new_token->body = token_value;
 
@@ -42,10 +44,8 @@ buffer_push_token(token_type token_type, void *token_value, parser_state *state)
 internal inline void
 buffer_consume(buffer *json_buffer) { ++json_buffer->current_idx; }
 
-internal inline char
-buffer_char(buffer *json_buffer) {
-    return string_char(json_buffer->str, json_buffer->current_idx);
-}
+inline internal char
+buffer_char(buffer *json_buffer) { return json_buffer->str[json_buffer->current_idx]; }
 
 internal inline void
 buffer_consume_until(buffer *json_buffer, char char_to_stop) {
@@ -106,7 +106,7 @@ buffer_consume_extract_numeric(string_value *str, buffer *json_buffer) {
         }
     }
     usize end_idx = json_buffer->current_idx;
-    str->data = json_buffer->str.data + start_idx;
+    str->data = json_buffer->str + start_idx;
     str->length = end_idx - start_idx;
 
     return is_float;
@@ -122,45 +122,71 @@ jp_lexer(buffer *json_buffer, parser_state *state) {
         buffer_consume_ignores(json_buffer);
         /* TODO(abid): Guard against using comma at the end of a scope. */
         bool expect_element = false;
+        json_scope *scope = NULL;
+        //u64 *scope_count = NULL;
 
         switch(json_buffer->str[json_buffer->current_idx]) {
             case '"': {
                 /* TODO(abid): No support for Unicode - 24.Sep.2024 */
                 // string_value *str = push_struct(string_value, memory);
-                string_value *str_value = push_struct(string_value, state->arena)
+                string_value *str_value = push_struct(string_value, state->temp_arena);
                 buffer_to_cstring(str_value, json_buffer);
                 buffer_consume_ignores(json_buffer);
                 if(json_buffer->str[json_buffer->current_idx] == ':') {
                     /* NOTE(abid): We have a key. */
                     buffer_push_token(tt_key, (void *)str_value, state);
                     buffer_consume(json_buffer);
-                } else buffer_push_token(tt_value_str, (void *)str_value, state);
-
+                } else {
+                    buffer_push_token(tt_value_str, (void *)str_value, state);
+                    assert(scope != NULL, "scope cannot be NULL"); ++scope->count;
+                }
                 state->global_bytes_size += str_value->length+1;
             } break;
             case '{': { 
-                buffer_push_token(tt_dict_begin, content_bytes_size, state);
-                buffer_consume(json_buffer); 
-
                 state->global_bytes_size += sizeof(json_value) + sizeof(json_dict);
+
+                /* NOTE(abid): Increment the parent count before giving scope to child, if
+                 * we are not root itself. */
+                if(scope != NULL) ++scope->count;
+                json_scope *this_scope = push_struct(json_scope, state->temp_arena);
+                this_scope->parent = scope;
+                scope = this_scope;
+
+                buffer_push_token(tt_dict_begin, this_scope, state);
+                buffer_consume(json_buffer); 
             } break;
             case '[': { 
-                buffer_push_token(tt_list_begin, num_content, state);
-                buffer_consume(json_buffer);
-
                 state->global_bytes_size += sizeof(json_value) + sizeof(json_list);
+
+                assert(scope != NULL, "scope cannot be NULL"); ++scope->count;
+                json_scope *this_scope = push_struct(json_scope, state->temp_arena);
+                this_scope->parent = scope;
+                scope = this_scope;
+
+                buffer_push_token(tt_list_begin, this_scope, state);
+                buffer_consume(json_buffer);
             } break;
-            case '}': { buffer_push_token(tt_dict_end,   0, state); buffer_consume(json_buffer); } break;
-            case ']': { buffer_push_token(tt_list_end,   0, _state); buffer_consume(json_buffer); } break;
+            case '}': { 
+                /* WARNING(abid): Temporary memory leak here. TODO: Handle the case of popping the scope,
+                 * add them to a free list. */
+                buffer_push_token(tt_dict_end, 0, state); buffer_consume(json_buffer);
+                scope = scope->parent;
+            } break;
+            case ']': {
+                /* WARNING(abid): Temporary memory leak here. TODO: Handle the case of popping the scope,
+                 * add them to a free list. */
+                buffer_push_token(tt_list_end, 0, state); buffer_consume(json_buffer);
+                scope = scope->parent;
+            } break;
             case '\0': { buffer_push_token(tt_eot, 0, state); buffer_consume(json_buffer); } break;
             case '\t':
             case '\n':
             case '\r':
-            case ',':
+            case ',': { expect_element = true; buffer_consume(json_buffer); } break;
             case ' ': { buffer_consume_ignores(json_buffer); } break;
             default: {
                 if(buffer_is_numeric(json_buffer)) {
-                    string_value *str = push_struct(string, state);
+                    string_value *str = push_struct(string_value, state->temp_arena);
                     bool is_float = buffer_consume_extract_numeric(str, json_buffer);
                     if(is_float) {
                         /* NOTE(abid): Float is 64-bit. */
@@ -172,19 +198,36 @@ jp_lexer(buffer *json_buffer, parser_state *state) {
                         buffer_push_token(tt_value_int, str, state);
                         state->global_bytes_size += sizeof(i64);
                     }
+                    assert(scope != NULL, "scope cannot be NULL"); ++scope->count;
                 } else assert(0, "invalid path");
             }
         }
     }
 
     state->current_token = state->token_list;
-    state->content_bytes_size = content_bytes_size;
+}
+
+/* NOTE(abid): String routines. */
+internal usize
+cstring_length(char *c_string) {
+    usize result = 0;
+    while(*c_string++) ++result;
+
+    return result;
+}
+
+internal string_value
+string_make(char *c_string) {
+    return (string_value) {
+        .data = c_string,
+        .length = cstring_length(c_string)
+    };
 }
 
 internal usize
-hash_from_string(char *string) {
+jp_hash_from_string(char *string) {
     /* NOTE(abid): Adapted from `https://stackoverflow.com/questions/7616461/generate-a-hash-from-string-in-javascript` */ 
-    string_len = cstring_length(string)
+    usize string_len = cstring_length(string);
     usize hash = 0;
     if(string_len == 0) return hash;
 
@@ -196,6 +239,7 @@ hash_from_string(char *string) {
 }
 
 /* NOTE(abid): JSON list routines. */
+#if 0
 internal json_list *
 jp_list_create(usize array_count, parser_state *state) {
     /* NOTE(abid): `array_count` should be the final size of the current array (non-growable). */
@@ -206,24 +250,30 @@ jp_list_create(usize array_count, parser_state *state) {
 
     return result;
 }
+#endif
 
 internal void
-jp_list_add(json_list *list, void *content, json_value value) {
-    /* NOTE(abid): We expect the `list` to have enough space. */
-    /* TODO(abid): Implement the array properly so that the content of the array in the memory
-     *             is beside the array. For that, lexer must change to gather type information.
-     * - 24.Sep.2024 */
-    assert(result->count  < result->max_count, "cannot add, array full");
-    list.array[result->count] = value;
+jp_list_add(json_scope *list_scope, json_value *j_value) {
+    json_list *parent_list = (json_list *)(list_scope->content+1);
+    parse_assert(parent_list->count > list_scope->idx, "list index out of bounds")
+
+    json_value **v_element = parent_list->array + list_scope->idx;
+    parse_assert(*v_element == NULL, "value entry in list already filled.");
+    *v_element = j_value;
+
+    list_scope->idx++;
 }
 
+#if 0
 internal json_value *
 jp_list_get(json_list *list, usize index) {
-    assert(list->max_count > index, "index out of bound");
+    assert(list->count > index, "index out of bound");
     return list->array + index;
 }
+#endif
 
 /* NOTE(abid): Dictionary routines. */
+#if 0
 inline internal json_dict *
 jp_dict_create(usize table_init_count, parser_state *current_memory) {
     json_dict *result = push_size(sizeof(json_dict) + sizeof(dict_content)*table_init_count,
@@ -233,7 +283,9 @@ jp_dict_create(usize table_init_count, parser_state *current_memory) {
 
     return result;
 }
+#endif
 
+#if 0
 internal void
 jp_dict_add(json_dict *dict, string_value key, void *content, json_value_type type, parser_state mem) {
     /* NOTE(abid): We expect `key` and `content` be valid until end of program.
@@ -290,37 +342,19 @@ string_is_equal(string str1, string str2) {
     return true;
 }
 
-/* NOTE(abid): String routines. */
-internal usize
-cstring_length(char *c_string) {
-    usize result = 0;
-    while(*c_string++) ++result;
+internal dict_content **
+jp_dict_get_empty(json_dict *dict, char *string) {
+    u32 hash = hash_from_string(string);
+    dict_content *slot = dict->table + (hash % dict->table_count);
 
-    return result;
+    /* NOTE(abid): Check for collision */
+    if(slot == NULL) return slot;
+    do { slot = slot->next; } while(slot);
+
+    return &slot;
 }
 
-internal inline char
-string_char(string str, usize idx) {
-    assert(idx < str.length, "string index out of range");
-
-    return str.data[idx];
-}
-
-internal string_extende
-string_make(char *c_string) {
-    return (string) {
-        .data = c_string,
-        .length = cstring_length(c_string)
-    };
-}
-
-/* NOTE(abid): Parser routines. */ #define parse_err(str, ...) fprintf(stderr, "parse error: " str "\n", __VA_ARGS__)
-#define parse_assert(expr, str, ...) \
-    if((expr)) { } \
-    else { \
-        parse_err(str, ##__VA_ARGS__); \
-        exit(EXIT_FAILURE); \
-    }
+#endif
 
 inline internal void
 token_expect(token *tok, token_type tok_type) {
@@ -341,23 +375,34 @@ token_peek(token *tok, usize forward_count) {
     return result;
 }
 
-internal dict_content **
-jp_dict_get_empty(json_dict *dict, char *string) {
-    u32 hash = hash_from_string(string);
-    dict_content *slot = dict->table + (hash % dict->table_count);
-
-    /* NOTE(abid): Check for collision */
-    if(slot == NULL) return slot;
-    do { slot = slot->next; } while(slot);
-
-    return &slot;
+internal void
+jp_dict_add_value(json_scope *dict_scope, json_value *j_value) {
+    json_dict *parent_dict = (json_dict *)(dict_scope->content+1);
+    dict_kv *kv_element = parent_dict->table + dict_scope->idx;
+    parse_assert(kv_element && kv_element->key != NULL, "value must have associated key inside dict.");
+    parse_assert(kv_element->value == NULL, "value entry in dict already filled.");
+    kv_element->value = j_value;
 }
 
+inline internal void
+jp_add_to_scope(json_scope *scope, json_value *j_value) {
+    /* NOTE(abid): Add the json_value to the current scope (dict/list). */
+    json_value *parent_value = (json_value *)(scope->content+1);
+    if(parent_value->type == jvt_dict) jp_dict_add_value(scope, j_value);
+    else if(parent_value->type == jvt_list) jp_list_add(scope, j_value);
+}
 
-/* TODO(abid): We already know the size of the strings, with include keys as well,
- * which means that we will be able to create @two arrays for dictionaries, one for keys
- * and another for the values to be more efficient in our memory pattern. - 24.Sep.2024 */
-internal json_dict
+internal char *
+jp_push_token_str_to_cstr(token *current_token, mem_arena *json_arena) {
+    string_value *str = (string_value *)current_token->body;
+    char *c_str = push_size(str->length+1, json_arena);
+    for(u32 idx = 0; idx < str->length; ++idx) c_str[idx] = str->data[idx];
+    c_str[str->length] = '\0';
+
+    return c_str;
+}
+
+internal void 
 jp_parser(parser_state *state) {
     token *current_token = state->token_list;
     /* NOTE(abid): The initial tokens must dict_begin followed by a key. */
@@ -365,83 +410,116 @@ jp_parser(parser_state *state) {
     token_expect(token_peek(current_token, 1), tt_key);
 
     /* NOTE(abid): Push the entire required memory for json object at once. */
-    void *json_memory = push_size(state->content_bytes_size, state->arena);
-    json_dict *json_root = json_memory;
-
-    /* NOTE(abid): Every allocation after this will be discard at its end. */
-    temp_memory temp_mem = mem_temp_begin(state->arena);
+    mem_arena *json_arena = arena_create(state->global_bytes_size, state->global_bytes_size);
+    state->json = json_arena->ptr;
 
     /* NOTE(abid): Current scope of the container we are in [json_list | json_dict]. */
-    linked_list *current_scope = NULL;
+    json_scope *scope = NULL;
     while(current_token->type != tt_eot) {
         switch(current_token->type) {
             case tt_dict_begin: {
-                json_value *value;
-                /* NOTE(abid): Check if we are at the root dictionary or not. */
-                if(current_scope == NULL) value = (json_value *)json_memory;
-                else {
-                    json_dict dict = (json_dict *)(current_scope->content + 1);
-                    // dict_content **content = jp_dict_get_empty(dict, );
-                }
+                json_value *j_value = push_size(sizeof(json_value) + sizeof(json_dict), json_arena);
+                j_value->type = jvt_dict;
+                json_dict *dict = (json_dict *)(j_value+1);
 
-                json_memory += sizeof(json_value) + sizeof(json_dict);
-                dict->type = jvt_dict;
-                linked_list *ll = push_struct(linked_list, state->arena);
-                ll->content = value;
-                ll->parent = current_scope;
-                current_scope = ll;
+                json_scope *l_scope = (json_scope *)current_token->body;
+                dict->count = l_scope->count;
+                dict->table = push_size(dict->count*sizeof(dict_kv), json_arena);
 
-                json_dict *dict = value + 1;
-                dict->table = json_memory;
-                dict->count = 0;
-                dict->content_size = 0;
+                /* NOTE(abid): If are not at the root dictionary, then must add to parent. */
+                if(scope != NULL) jp_add_to_scope(scope, j_value);
+                json_scope *this_scope = push_struct(json_scope, state->temp_arena);
+                this_scope->content = j_value;
+                this_scope->parent = scope;
+                this_scope->idx = 0;
+                scope = this_scope;
             } break;
             case tt_list_begin: {
-                parse_assert(current_scope == NULL, "a list cannot be the first scope in JSON");
-                json_value *value = (json_value *)current_scope->content;
-                json_memory += sizeof(json_value) + sizeof(json_list);
+                parse_assert(scope != NULL, "a list cannot be the first scope in JSON");
 
-                linked_list *ll = push_struct(linked_list, state->arena);
-                ll->content = value;
-                ll->parent = current_scope;
-                current_scope = ll;
+                json_value *j_value = push_size(sizeof(json_value) + sizeof(json_list), json_arena);
+                j_value->type = jvt_list;
+                json_list *list = (json_list *)(j_value+1);
 
-                json_list *lst = value + 1;
-                dict->array = json_memory;
-                dict->count = 0;
-                dict->content_size = 0;
+                json_scope *l_scope = (json_scope *)current_token->body;
+                list->count = l_scope->count;
+                list->array = push_size(list->count*sizeof(json_value *), json_arena);
+
+                jp_add_to_scope(scope, j_value);
+                json_scope *this_scope = push_struct(json_scope, state->temp_arena);
+                this_scope->content = j_value;
+                this_scope->parent = scope;
+                this_scope->idx = 0;
+                scope = this_scope;
             } break;
-            case tt_list_end: {
+            case tt_list_end: 
             case tt_dict_end: {
-                parse_assert(current_scope != NULL, "unexpected closing of scope, did you enter an extra }/]?");
-                current_scope = current_scope->parent;
+                parse_assert(scope != NULL, "unexpected closing of scope, did you enter an extra }/]?");
+                /* WARNING(abid): Temporary memory leak here. TODO: Handle the case of popping the scope,
+                 * add them to a free list. */
+                scope = scope->parent;
             } break;
             case tt_key: {
-                is_dict = ((json_value *)current_scope->content)->type == jvt_dict
-                parse_assert(is_dict, "unexpected key inside a non-dictionary scope");
+                parse_assert(scope && ((json_value *)(scope+1))->type == jvt_dict,
+                             "key cannot exist outside dictionary scope");
+                json_dict *parent_dict = (json_dict *)(scope->content+1);
+                // dict_kv *kv_element = parent_dict->table + scope->idx;
 
-                string_value *string = (string_value *)current_token->body;
-                memcpy(string->data, json_memory, string->length);
-                string *str = (string *)current_token->body;
-                token_advance(current_token);
+                char *key = jp_push_token_str_to_cstr(current_token, json_arena);
+                usize hash = jp_hash_from_string(key);
+                usize original_idx = (hash % parent_dict->count);
+
+                dict_kv *kv_element = NULL;
+                /* NOTE(abid): Check for collision hits. */
+                usize potential_idx = original_idx;
+                while(true) {
+                    kv_element = parent_dict->table + potential_idx;
+                    if(kv_element->key == NULL) break;
+
+                    potential_idx = (potential_idx+1) % parent_dict->count;
+                    parse_assert(original_idx != potential_idx, "count not find empty entry in dict.");
+                }
+                kv_element->key = key;
+                scope->idx = potential_idx;
             } break;
             case tt_value_float: {
+                parse_assert(scope, "float value cannot exist outside a scope");
+
+                json_value *j_value = push_size(sizeof(json_value) + sizeof(f64), json_arena);
+                j_value->type = jvt_float;
+                f64 *value = (f64 *)(j_value+1);
+
+                char *end;
+                char *float_str = jp_push_token_str_to_cstr(current_token, json_arena);
+                *value = strtod(float_str, &end);
+
+                jp_add_to_scope(scope, j_value);
             } break;
             case tt_value_int: {
+                parse_assert(scope, "integer value cannot exist outside a scope");
+
+                json_value *j_value = push_size(sizeof(json_value) + sizeof(i64), json_arena);
+                j_value->type = jvt_int;
+                i64 *value = (i64 *)(j_value+1);
+
+                char *int_str = jp_push_token_str_to_cstr(current_token, json_arena);
+                *value = atol(int_str);
+
+                jp_add_to_scope(scope, j_value);
             } break;
             case tt_value_str: {
+                parse_assert(scope, "string value cannot exist outside a scope");
+
+                json_value *j_value = push_size(sizeof(json_value) + sizeof(char *), json_arena);
+                j_value->type = jvt_str;
+                char *value = (char *)(j_value+1);
+                value = jp_push_token_str_to_cstr(current_token, json_arena);
             } break;
 
             default: assert(0, "invalid code path in parser");
         }
         token_advance(&current_token);
     }
-    mem_temp_end(temp_mem);
-
-    parse_assert(dict_scope_value == 0, "mismatch in json object scope");
-    parse_assert(list_scope_value == 0, "mismatch in list scope");
-
-    return parsed_json;
 }
 
 internal buffer 
@@ -470,8 +548,8 @@ read_text_file(char *Filename) {
     }
     fclose(FileHandle);
 
-    Result.str.data = Content;
-    Result.str.length = BytesRead - 1; // -1 for the \0 at the end of the buffer
+    Result.str = Content;
+    // Result.str.length = BytesRead - 1; // -1 for the \0 at the end of the buffer
     Result.current_idx = 0;
 
     return Result;
@@ -480,11 +558,14 @@ read_text_file(char *Filename) {
 internal void
 jp_load(char *Filename) {
     buffer Buffer = read_text_file(Filename);
+    usize physical_mem_max_size = platform_ram_size_get();
     parser_state state = {
-        .arena = allocate_arena(Megabyte(10)),
+        .json = NULL,
+        .temp_arena = arena_create(Megabyte(10), (u64)(physical_mem_max_size/2)),
         .token_list = NULL,
         .current_token = NULL
     };
-    lexer(&Buffer, &state);
-    parser_parse(&state);
+    jp_lexer(&Buffer, &state);
+    jp_parser(&state);
+    /* TODO(abid): Free `Buffer` and `temp_arena` memory here. - 14.Oct.2024 */
 }
