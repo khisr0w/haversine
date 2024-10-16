@@ -56,7 +56,7 @@ $(OBJECTS_DEBUG): $(SOURCES)
 ifeq ($(OS),Windows_NT)
 	@$(CC) $(CFLAGS_COMMON) $(CFLAGS_DEBUG) /Fo$@ /c $<
 else
-	@$(CC) $(CFLAGS_COMMON) $(CFLAGS_DEBUG) -c $< -o $@ 
+	@$(CC) -fdiagnostics-absolute-paths $(CFLAGS_COMMON) $(CFLAGS_DEBUG) -c $< -o $@ 
 endif
 
 # Link debug executable

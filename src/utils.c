@@ -10,7 +10,17 @@
 
 #ifdef PLT_WIN
 #include <windows.h>
+#elif PLT_LINUX
+#include <sys/mman.h>
+#include <unistd.h>
+#include <string.h>
 #endif
+
+/* NOTE(abid): Byte Macros */
+#define kilobyte(value) ((value)*1024LL)
+#define megabyte(value) (kilobyte(value)*1024LL)
+#define gigabyte(value) (megabyte(value)*1024LL)
+#define terabyte(value) (gigabyte(value)*1024LL)
 
 #define __assert_glue(a, b) a ## b
 
@@ -30,15 +40,15 @@
     }
 
 inline internal f64
-Square(f64 A) {
-    f64 Result = (A*A);
-    return Result;
+square(f64 a) {
+    f64 result = (a*a);
+    return result;
 }
 
 inline internal f64 
-RadiansFromDegrees(f64 Degrees) {
-    f64 Result = 0.01745329251994329577f * Degrees;
-    return Result;
+radians_from_degrees(f64 degrees) {
+    f64 result = 0.01745329251994329577f * degrees;
+    return result;
 }
 
 /* NOTE(abid): Get the physical memory (RAM) size. */
@@ -49,9 +59,27 @@ platform_ram_size_get() {
     GlobalMemoryStatusEx(&mem_stat);
     return mem_stat.ullTotalPhys;
 #elif PLT_LINUX
-    /* TODO(abid): Implement for linux. */
-    assert_static(0, "not implemented for linux");
+    return getpagesize();
 #endif
+}
+
+inline internal void *
+platform_allocate(usize alloc_size) {
+#ifdef PLT_WIN
+    void *result = VirtualAlloc(NULL, alloc_size, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE);
+    if(result == NULL) {
+            GetLastError();
+            exit(EXIT_FAILURE);
+    }
+#elif PLT_LINUX
+    void *result = mmap(NULL, alloc_size, PROT_READ | PROT_WRITE, MAP_SHARED | MAP_ANONYMOUS | MAP_FIXED, -1, 0);
+    if(result == MAP_FAILED) {
+        perror("mmap");
+        exit(EXIT_FAILURE);
+    }
+#endif
+
+    return result;
 }
 
 inline internal void *
@@ -63,7 +91,7 @@ platform_reserve(usize reserve_size) {
         exit(EXIT_FAILURE);
     }
 #elif PLT_LINUX
-    void *result = mmap(NULL, reserve_size, PROT_NONE, MAP_PRIVATE | MAP_ANONYMOUS | MAP_NORESERVE, -1, 0);
+    void *result = mmap(NULL, reserve_size, PROT_NONE, MAP_PRIVATE | MAP_ANONYMOUS | MAP_SHARED | MAP_FIXED, -1, 0);
     if(result == MAP_FAILED) {
         perror("mmap");
         exit(EXIT_FAILURE);
@@ -83,13 +111,26 @@ platform_commit(void *base_addr, usize commit_size) {
         exit(EXIT_FAILURE);
     }
 #elif PLT_LINUX
-    void *result = mmap(base_addr, Size, PROT_READ | PROT_WRITE,
+    void *result = mmap(base_addr, commit_size, PROT_READ | PROT_WRITE,
                         MAP_SHARED | MAP_ANONYMOUS | MAP_FIXED, -1, 0);
     if(result == MAP_FAILED) {
         perror("mmap");
         exit(EXIT_FAILURE);
     }
 #endif 
+
+    return result;
+}
+
+inline internal bool
+platform_free(void *ptr, usize size) {
+#ifdef PLT_WIN
+    /* NOTE(abid): Win32 requires the size to be zero when MEM_RELEASE. */
+    size = 0;
+    bool result = (VirtualFree(ptr, size, MEM_RELEASE) != 0);
+#elif PLT_LINUX
+    bool result = (munmap(ptr, size) == 0);
+#endif
 
     return result;
 }
@@ -116,14 +157,12 @@ mem_temp_end(temp_memory temp_mem) {
     --arena->temp_count;
 }
 
-/* NOTE(abid): At the moment, we reserve a virtual memory space equivalent to the
- * system's entire physical memory. This means that we will only run out of memory
- * if we've exhaused all physical memory space or we will start paging to disk :( - 28.Sep.2024
- * TODO: We are not keeping track of the committed pages yet, which means we have no way of
+/* TODO: We are not keeping track of the committed pages yet, which means we have no way of
  * shrinking the memory. Figure out if the added computation is worth it. - 28.Sep.2024 */
 internal mem_arena *
 arena_create(usize bytes_to_allocate, usize bytes_to_reserve) {
     usize physical_mem_max_size = bytes_to_reserve;
+    /* TODO(abid): Probably need to get rid of the ram branch here, user can decide. - 16.Oct.2024 */
     if(bytes_to_reserve == 0) physical_mem_max_size = platform_ram_size_get();
     
     void *base_addr = platform_reserve(physical_mem_max_size);
@@ -139,6 +178,9 @@ arena_create(usize bytes_to_allocate, usize bytes_to_reserve) {
     return arena;
 }
 
+inline internal bool
+arena_free(mem_arena *arena) { return platform_free(arena->ptr, arena->size); }
+
 #define push_struct(type, arena) (type *)push_size(sizeof(type), arena)
 #define push_array(type, count, arena) (type *)push_size((count)*sizeof(type), arena)
 internal void *
@@ -149,6 +191,7 @@ push_size(usize size, mem_arena *arena) {
 
         u64 size_to_allocate = (arena->alloc_stride > size) ? arena->alloc_stride : size;
         platform_commit((u8 *)arena->ptr + size, size_to_allocate);
+        arena->size += size_to_allocate;
     }
 
     void *result = (u8 *)arena->ptr + arena->used;
@@ -168,8 +211,8 @@ push_size_arena(mem_arena *Arena, usize Size){
 }
 #endif
 
-#define ArenaCurrent(Arena) (void *)((u8 *)(Arena)->ptr + (Arena)->used)
-#define ArenaAdvance(Arena, Number, Type) (Arena)->used += sizeof(Type)*(Number)
+#define arena_current(Arena) (void *)((u8 *)(Arena)->ptr + (Arena)->used)
+#define arena_advance(Arena, Number, Type) (Arena)->used += sizeof(Type)*(Number)
 
 #if 0
 inline internal mem_arena

@@ -2,7 +2,7 @@
     |                                                                                  |
     |     Subdirectory:  /src                                                          |
     |    Creation date:  7/12/2024 5:11:40 PM                                          |
-    |    Last Modified:                                                                |
+    |    Last Modified:  Di 15 Okt 2024 14:59:37 CEST                                  |
     |                                                                                  |
     +======================================| Copyright © Sayed Abid Hashimi |==========+  */
 
@@ -112,10 +112,27 @@ buffer_consume_extract_numeric(string_value *str, buffer *json_buffer) {
     return is_float;
 }
 
-/* NOTE(abid): Okay, so we've decided that it would be better to go back to the old
- * c-style string instead of a custom struct, mainly because of how it should be used after
- * the parsing is done. One would expect all strings to be null terminated, and c-library
- * compliant. So making our own string library is @not a good idea here. 24.Sep.2024 */
+inline internal void
+scope_free_and_walk_up(json_scope *scope, parser_state *state) {
+    /* NOTE(abid): Go up to the parent scope and add the current scope to the free list. */
+    json_scope *temp = state->scope_free_list;
+    state->scope_free_list = scope;
+    scope = scope->parent;
+    state->scope_free_list->parent = temp;
+}
+
+inline internal json_scope *
+scope_new(parser_state *state) {
+    json_scope *scope;
+    if(state->scope_free_list) {
+        /* NOTE(abid): We have a reserved scope in the free list. */
+        scope = state->scope_free_list;
+        state->scope_free_list = state->scope_free_list->parent;
+    } else scope = push_struct(json_scope, state->temp_arena);
+
+    return scope;
+}
+
 internal void
 jp_lexer(buffer *json_buffer, parser_state *state) {
     while(json_buffer->str[json_buffer->current_idx]) {
@@ -148,7 +165,7 @@ jp_lexer(buffer *json_buffer, parser_state *state) {
                 /* NOTE(abid): Increment the parent count before giving scope to child, if
                  * we are not root itself. */
                 if(scope != NULL) ++scope->count;
-                json_scope *this_scope = push_struct(json_scope, state->temp_arena);
+                json_scope *this_scope = scope_new(state);
                 this_scope->parent = scope;
                 scope = this_scope;
 
@@ -159,7 +176,7 @@ jp_lexer(buffer *json_buffer, parser_state *state) {
                 state->global_bytes_size += sizeof(json_value) + sizeof(json_list);
 
                 assert(scope != NULL, "scope cannot be NULL"); ++scope->count;
-                json_scope *this_scope = push_struct(json_scope, state->temp_arena);
+                json_scope *this_scope = scope_new(state);
                 this_scope->parent = scope;
                 scope = this_scope;
 
@@ -167,16 +184,12 @@ jp_lexer(buffer *json_buffer, parser_state *state) {
                 buffer_consume(json_buffer);
             } break;
             case '}': { 
-                /* WARNING(abid): Temporary memory leak here. TODO: Handle the case of popping the scope,
-                 * add them to a free list. */
                 buffer_push_token(tt_dict_end, 0, state); buffer_consume(json_buffer);
-                scope = scope->parent;
+                scope_free_and_walk_up(scope, state);
             } break;
             case ']': {
-                /* WARNING(abid): Temporary memory leak here. TODO: Handle the case of popping the scope,
-                 * add them to a free list. */
                 buffer_push_token(tt_list_end, 0, state); buffer_consume(json_buffer);
-                scope = scope->parent;
+                scope_free_and_walk_up(scope, state);
             } break;
             case '\0': { buffer_push_token(tt_eot, 0, state); buffer_consume(json_buffer); } break;
             case '\t':
@@ -239,6 +252,18 @@ jp_hash_from_string(char *string) {
 }
 
 /* NOTE(abid): JSON list routines. */
+internal void
+jp_list_add(json_scope *list_scope, json_value *j_value) {
+    json_list *parent_list = (json_list *)(list_scope->content+1);
+    parse_assert(parent_list->count > list_scope->idx, "list index out of bounds");
+
+    json_value **v_element = parent_list->array + list_scope->idx;
+    parse_assert(*v_element == NULL, "value entry in list already filled.");
+    *v_element = j_value;
+
+    list_scope->idx++;
+}
+
 #if 0
 internal json_list *
 jp_list_create(usize array_count, parser_state *state) {
@@ -250,21 +275,7 @@ jp_list_create(usize array_count, parser_state *state) {
 
     return result;
 }
-#endif
 
-internal void
-jp_list_add(json_scope *list_scope, json_value *j_value) {
-    json_list *parent_list = (json_list *)(list_scope->content+1);
-    parse_assert(parent_list->count > list_scope->idx, "list index out of bounds")
-
-    json_value **v_element = parent_list->array + list_scope->idx;
-    parse_assert(*v_element == NULL, "value entry in list already filled.");
-    *v_element = j_value;
-
-    list_scope->idx++;
-}
-
-#if 0
 internal json_value *
 jp_list_get(json_list *list, usize index) {
     assert(list->count > index, "index out of bound");
@@ -283,9 +294,7 @@ jp_dict_create(usize table_init_count, parser_state *current_memory) {
 
     return result;
 }
-#endif
 
-#if 0
 internal void
 jp_dict_add(json_dict *dict, string_value key, void *content, json_value_type type, parser_state mem) {
     /* NOTE(abid): We expect `key` and `content` be valid until end of program.
@@ -353,7 +362,6 @@ jp_dict_get_empty(json_dict *dict, char *string) {
 
     return &slot;
 }
-
 #endif
 
 inline internal void
@@ -428,7 +436,7 @@ jp_parser(parser_state *state) {
 
                 /* NOTE(abid): If are not at the root dictionary, then must add to parent. */
                 if(scope != NULL) jp_add_to_scope(scope, j_value);
-                json_scope *this_scope = push_struct(json_scope, state->temp_arena);
+                json_scope *this_scope = scope_new(state);
                 this_scope->content = j_value;
                 this_scope->parent = scope;
                 this_scope->idx = 0;
@@ -446,7 +454,7 @@ jp_parser(parser_state *state) {
                 list->array = push_size(list->count*sizeof(json_value *), json_arena);
 
                 jp_add_to_scope(scope, j_value);
-                json_scope *this_scope = push_struct(json_scope, state->temp_arena);
+                json_scope *this_scope = scope_new(state);
                 this_scope->content = j_value;
                 this_scope->parent = scope;
                 this_scope->idx = 0;
@@ -455,9 +463,7 @@ jp_parser(parser_state *state) {
             case tt_list_end: 
             case tt_dict_end: {
                 parse_assert(scope != NULL, "unexpected closing of scope, did you enter an extra }/]?");
-                /* WARNING(abid): Temporary memory leak here. TODO: Handle the case of popping the scope,
-                 * add them to a free list. */
-                scope = scope->parent;
+                scope_free_and_walk_up(scope, state);
             } break;
             case tt_key: {
                 parse_assert(scope && ((json_value *)(scope+1))->type == jvt_dict,
@@ -525,8 +531,7 @@ jp_parser(parser_state *state) {
 internal buffer 
 read_text_file(char *Filename) {
     buffer Result = {0};
-    FILE *FileHandle = NULL;
-    fopen_s(&FileHandle, Filename, "rb");
+    FILE *FileHandle = fopen(Filename, "rb");
 
     /* NOTE(abid): Get the size of the File */
     fseek(FileHandle, 0, SEEK_END);
@@ -561,7 +566,7 @@ jp_load(char *Filename) {
     usize physical_mem_max_size = platform_ram_size_get();
     parser_state state = {
         .json = NULL,
-        .temp_arena = arena_create(Megabyte(10), (u64)(physical_mem_max_size/2)),
+        .temp_arena = arena_create(megabyte(10), (u64)(physical_mem_max_size/2)),
         .token_list = NULL,
         .current_token = NULL
     };

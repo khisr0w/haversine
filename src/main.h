@@ -29,12 +29,6 @@ typedef int16_t i16;
 #define ArraySize(Arr) sizeof((Arr)) / sizeof((Arr)[0])
 #define Assert(Expr, ErrorStr) if(!(Expr)) { fprintf(stderr, "ASSERTION ERROR (%s:%d): " ErrorStr "\nExiting...\n", __FILE__, __LINE__); *(i32 *)0 = 0; }
 
-/* NOTE(abid): Byte Macros */
-#define Kilobyte(Value) ((Value)*1024LL)
-#define Megabyte(Value) (Kilobyte(Value)*1024LL)
-#define Gigabyte(Value) (Megabyte(Value)*1024LL)
-#define Terabyte(Value) (Gigabyte(Value)*1024LL)
-
 typedef struct {
     f64 Latest;
     f64 Sum;
@@ -45,7 +39,7 @@ typedef struct {
 } stat_f64;
 
 internal inline void
-StatF64Accumulate(f64 Value, stat_f64 *Stat) {
+stat_f64_accumulate(f64 Value, stat_f64 *Stat) {
     if(Stat->Count == 0) {
         Stat->Max = Value;
         Stat->Min = Value;
@@ -80,7 +74,7 @@ global_var rand_state __GLOBALRandState = {
 };
 
 inline internal void
-RandSeed(u64 Seed) {
+rand_seed(u64 Seed) {
     /* NOTE(abid): Reserve bits for U8 and U16 routines. */
 
     __GLOBALRandState.V ^= Seed;
@@ -102,7 +96,7 @@ RandU64() {
 /* NOTE(abid): Range in [Min, Max) */
 /* TODO(abid): Get rid of modulus in here (faster). */
 inline internal u64
-RandRangeU64(u64 Min, u64 Max) { return Min + RandU64() % (Max-Min); }
+rand_range_u64(u64 Min, u64 Max) { return Min + RandU64() % (Max-Min); }
 
 inline internal u32 RandU32() { return (u32)RandU64(); }
 
@@ -128,7 +122,7 @@ RandF64() { return 5.42101086242752217e-20 * (f64)RandU64(); }
 
 /* NOTE(abid): Range [Min, Max] */
 inline internal f64
-RandRangeF64(f64 Min, f64 Max) { return Min + RandF64() * (Max - Min); }
+rand_range_f64(f64 Min, f64 Max) { return Min + RandF64() * (Max - Min); }
 
 #define MAIN_H
 #endif

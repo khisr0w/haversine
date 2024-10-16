@@ -7,15 +7,18 @@
     +======================================| Copyright © Sayed Abid Hashimi |==========+  */
 
 #include <string.h>
+#include <stdio.h>
 
 #if !defined(JSON_PARSE_H)
 
-/* NOTE(abid): Parser routines. */ #define parse_err(str, ...) fprintf(stderr, "parse error: " str "\n", __VA_ARGS__)
-#define parse_assert(expr, str, ...) \
-    if((expr)) { } \
-    else { \
-        parse_err(str, ##__VA_ARGS__); \
-        exit(EXIT_FAILURE); \
+/* TODO(abid): Make sure for clang we keep the __VA_OPT__, but remove for others. */
+/* NOTE(abid): Parser routines. */
+#define parse_err(str, ...) fprintf(stderr, "parse error: " str "\n" __VA_OPT__(,) __VA_ARGS__)
+#define parse_assert(expr, str, ...)                \
+    if((expr)) { }                                  \
+    else {                                          \
+        parse_err(str __VA_OPT__(,) ##__VA_ARGS__); \
+        exit(EXIT_FAILURE);                         \
     }
 
 typedef struct {
@@ -91,6 +94,7 @@ typedef struct {
     json_value **array;
 } json_list;
 
+typedef struct json_scope json_scope;
 typedef struct {
     json_dict *json;
 
@@ -98,12 +102,13 @@ typedef struct {
     token *token_list;
     token *current_token;
     usize global_bytes_size;
+
+    json_scope *scope_free_list;
 } parser_state;
 
 
 /* NOTE(abid): Structure is used exclusively during the parsing process and is not part of final JSON.
  * - 14.Oct.2024 */
-typedef struct json_scope json_scope;
 struct json_scope {
     json_value *content;
     union {
