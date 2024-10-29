@@ -113,11 +113,13 @@ buffer_consume_extract_numeric(string_value *str, buffer *json_buffer) {
 }
 
 inline internal void
-scope_free_and_walk_up(json_scope *scope, parser_state *state) {
+scope_free_and_walk_up(json_scope **scope_p, parser_state *state) {
     /* NOTE(abid): Go up to the parent scope and add the current scope to the free list. */
+    json_scope *scope = *scope_p;
+
     json_scope *temp = state->scope_free_list;
     state->scope_free_list = scope;
-    scope = scope->parent;
+    *scope_p = scope->parent;
     state->scope_free_list->parent = temp;
 }
 
@@ -127,6 +129,8 @@ scope_new(parser_state *state) {
     if(state->scope_free_list) {
         /* NOTE(abid): We have a reserved scope in the free list. */
         scope = state->scope_free_list;
+        scope->content = NULL;
+        scope->count = 0;
         state->scope_free_list = state->scope_free_list->parent;
     } else scope = push_struct(json_scope, state->temp_arena);
 
@@ -135,13 +139,12 @@ scope_new(parser_state *state) {
 
 internal void
 jp_lexer(buffer *json_buffer, parser_state *state) {
+    /* TODO(abid): Guard against using comma at the end of a scope. */
+    bool comman_encountered = false;
+    json_scope *scope = NULL;
+
     while(json_buffer->str[json_buffer->current_idx]) {
         buffer_consume_ignores(json_buffer);
-        /* TODO(abid): Guard against using comma at the end of a scope. */
-        bool expect_element = false;
-        json_scope *scope = NULL;
-        //u64 *scope_count = NULL;
-
         switch(json_buffer->str[json_buffer->current_idx]) {
             case '"': {
                 /* TODO(abid): No support for Unicode - 24.Sep.2024 */
@@ -155,6 +158,7 @@ jp_lexer(buffer *json_buffer, parser_state *state) {
                     buffer_consume(json_buffer);
                 } else {
                     buffer_push_token(tt_value_str, (void *)str_value, state);
+                    state->global_bytes_size += sizeof(json_value);
                     assert(scope != NULL, "scope cannot be NULL"); ++scope->count;
                 }
                 state->global_bytes_size += str_value->length+1;
@@ -185,17 +189,21 @@ jp_lexer(buffer *json_buffer, parser_state *state) {
             } break;
             case '}': { 
                 buffer_push_token(tt_dict_end, 0, state); buffer_consume(json_buffer);
-                scope_free_and_walk_up(scope, state);
+                state->global_bytes_size += scope->count*sizeof(dict_kv);
+
+                scope_free_and_walk_up(&scope, state);
             } break;
             case ']': {
                 buffer_push_token(tt_list_end, 0, state); buffer_consume(json_buffer);
-                scope_free_and_walk_up(scope, state);
+                state->global_bytes_size += scope->count*sizeof(json_value *);
+
+                scope_free_and_walk_up(&scope, state);
             } break;
             case '\0': { buffer_push_token(tt_eot, 0, state); buffer_consume(json_buffer); } break;
             case '\t':
             case '\n':
             case '\r':
-            case ',': { expect_element = true; buffer_consume(json_buffer); } break;
+            case ',': { comman_encountered = true; buffer_consume(json_buffer); } break;
             case ' ': { buffer_consume_ignores(json_buffer); } break;
             default: {
                 if(buffer_is_numeric(json_buffer)) {
@@ -212,6 +220,7 @@ jp_lexer(buffer *json_buffer, parser_state *state) {
                         state->global_bytes_size += sizeof(i64);
                     }
                     assert(scope != NULL, "scope cannot be NULL"); ++scope->count;
+                    state->global_bytes_size += sizeof(json_value);
                 } else assert(0, "invalid path");
             }
         }
@@ -244,7 +253,7 @@ jp_hash_from_string(char *string) {
     usize hash = 0;
     if(string_len == 0) return hash;
 
-    for(usize idx; idx < string_len; ++string_len) {
+    for(usize idx = 0; idx < string_len; ++idx) {
         char chr = string[idx];
         hash = ((hash << 5) - hash) + chr;
     }
@@ -463,10 +472,10 @@ jp_parser(parser_state *state) {
             case tt_list_end: 
             case tt_dict_end: {
                 parse_assert(scope != NULL, "unexpected closing of scope, did you enter an extra }/]?");
-                scope_free_and_walk_up(scope, state);
+                scope_free_and_walk_up(&scope, state);
             } break;
             case tt_key: {
-                parse_assert(scope && ((json_value *)(scope+1))->type == jvt_dict,
+                parse_assert(scope && scope->content->type == jvt_dict,
                              "key cannot exist outside dictionary scope");
                 json_dict *parent_dict = (json_dict *)(scope->content+1);
                 // dict_kv *kv_element = parent_dict->table + scope->idx;
@@ -560,7 +569,7 @@ read_text_file(char *Filename) {
     return Result;
 }
 
-internal void
+internal json_value *
 jp_load(char *Filename) {
     buffer Buffer = read_text_file(Filename);
     usize physical_mem_max_size = platform_ram_size_get();
@@ -570,7 +579,11 @@ jp_load(char *Filename) {
         .token_list = NULL,
         .current_token = NULL
     };
+
     jp_lexer(&Buffer, &state);
     jp_parser(&state);
-    /* TODO(abid): Free `Buffer` and `temp_arena` memory here. - 14.Oct.2024 */
+
+    arena_free(state.temp_arena);
+
+    return state.json;
 }

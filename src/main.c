@@ -188,9 +188,10 @@ generate_haversine_json(u64 number_pairs, u64 num_clusters, char *filename) {
 }
 
 i32 main() {
-    // json_value *base_json = jp_json_load("..\\..\\test.json");
-    // json_value *value1 = jp_dict_get(base_json, "key");
-    // json_value *value1 = jp_list_get(value1, 3);
+    json_value *base_json = jp_load("..\\..\\test.json");
+    base_json++;
+    //json_value *value1 = jp_dict_get(base_json, "key");
+    //json_value *value1 = jp_list_get(value1, 3);
 
     return 0;
 }

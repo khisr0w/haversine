@@ -16,9 +16,9 @@ CFLAGS_RELEASE := #/O2 /Oi /MT /DRELEASE
 ifeq ($(OS),Windows_NT)
 CC := cl
 EXECUTABLE := haversine.exe
-CFLAGS_COMMON := /EHa /nologo /FC /Zo /WX /W4 /Gm- /wd5208 /wd4505 /wd4201 /DPLT_WIN
+CFLAGS_COMMON := /EHa /nologo /FC /Zo /WX /W4 /Gm- /wd5208 /wd4505 /wd4201 /DPLT_WIN /D_CRT_SECURE_NO_WARNINGS
 CFLAGS_DEBUG := /Od /MTd /Z7 /Zo /DDEBUG
-CFLAGS_RELEASE := /O2 /Oi /MT /DRELEASE
+CFLAGS_RELEASE := /Od /Oi /MT /DRELEASE
 endif
 
 # Source files
@@ -48,7 +48,11 @@ debug: $(DEBUG_DIR) $(OBJECTS_DEBUG) $(EXECUTABLE_DEUBG)
 
 $(DEBUG_DIR):
 	@echo Starting debug build...
+ifeq ($(OS),Windows_NT)
+	@if not exist "$(DEBUG_DIR)" ( mkdir "$(DEBUG_DIR)" )
+else
 	@mkdir -p $(DEBUG_DIR)
+endif
 
 $(OBJECTS_DEBUG): $(SOURCES)
 	@echo "    [Debug] Compiling Objects..."
@@ -75,7 +79,11 @@ release: $(RELEASE_DIR) $(OBJECTS_RELEASE) $(EXECUTABLE_RELEASE)
 
 $(RELEASE_DIR):
 	@echo Starting release build...
+ifeq ($(OS),Windows_NT)
+	@if not exist "$(RELEASE_DIR)" ( mkdir "$(RELEASE_DIR)" )
+else
 	@mkdir -p $(RELEASE_DIR)
+endif
 
 $(OBJECTS_RELEASE): $(SOURCES)
 	@echo "    Compiling Objects..."

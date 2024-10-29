@@ -4,154 +4,161 @@
 !_TAG_PROGRAM_NAME	Exuberant Ctags	//
 !_TAG_PROGRAM_URL	http://ctags.sourceforge.net	/official site/
 !_TAG_PROGRAM_VERSION	5.8	//
-ArenaAdvance	.\src\utils.c	170;"	d	file:
-ArenaCurrent	.\src\utils.c	169;"	d	file:
 ArraySize	.\src\main.h	29;"	d
 Assert	.\src\main.h	30;"	d
 Count	.\src\main.h	/^    u64 Count;$/;"	m	struct:__anon11
-GenerateHaversineJSON	.\src\main.c	/^GenerateHaversineJSON(u64 NumberPairs, u64 NumClusters, char *Filename, mem_arena *Arena) {$/;"	f
-Gigabyte	.\src\main.h	35;"	d
-JSON_PARSE_H	.\src\json_parse.h	106;"	d
-Kilobyte	.\src\main.h	33;"	d
+JSON_PARSE_H	.\src\json_parse.h	131;"	d
 Latest	.\src\main.h	/^    f64 Latest;$/;"	m	struct:__anon11
-MAIN_H	.\src\main.h	133;"	d
+MAIN_H	.\src\main.h	127;"	d
 Max	.\src\main.h	/^    f64 Max;$/;"	m	struct:__anon11
-Megabyte	.\src\main.h	34;"	d
 Min	.\src\main.h	/^    f64 Min;$/;"	m	struct:__anon11
 NumU16Reserves	.\src\main.h	/^    i32 NumU16Reserves;$/;"	m	struct:__anon12
 NumU8Reserves	.\src\main.h	/^    i32 NumU8Reserves;$/;"	m	struct:__anon12
-OffloadToBuffer	.\src\main.c	/^OffloadToBuffer(mem_arena *JSONBuffer, mem_arena *ResultBuffer, f64 Y0, f64 Y1, f64 X0, f64 X1, bool IsLast,$/;"	f
-RadiansFromDegrees	.\src\utils.c	/^RadiansFromDegrees(f64 Degrees) {$/;"	f
 RandF64	.\src\main.h	/^RandF64() { return 5.42101086242752217e-20 * (f64)RandU64(); }$/;"	f
-RandRangeF64	.\src\main.h	/^RandRangeF64(f64 Min, f64 Max) { return Min + RandF64() * (Max - Min); }$/;"	f
-RandRangeU64	.\src\main.h	/^RandRangeU64(u64 Min, u64 Max) { return Min + RandU64() % (Max-Min); }$/;"	f
-RandSeed	.\src\main.h	/^RandSeed(u64 Seed) {$/;"	f
 RandU16	.\src\main.h	/^inline internal u16 RandU16() {$/;"	f
 RandU32	.\src\main.h	/^inline internal u32 RandU32() { return (u32)RandU64(); }$/;"	f
 RandU64	.\src\main.h	/^RandU64() {$/;"	f
 RandU8	.\src\main.h	/^inline internal u8 RandU8() {$/;"	f
-ReferenceHaversine	.\src\main.c	/^ReferenceHaversine(f64 X0, f64 Y0, f64 X1, f64 Y1, f64 EarthRadius) {$/;"	f
-Square	.\src\utils.c	/^Square(f64 A) {$/;"	f
-StatF64Accumulate	.\src\main.h	/^StatF64Accumulate(f64 Value, stat_f64 *Stat) {$/;"	f
 StatF64Mean	.\src\main.h	/^StatF64Mean(stat_f64 *Stat) {$/;"	f
-StrLen	.\src\main.c	/^StrLen(char *Str) {$/;"	f
 Sum	.\src\main.h	/^    f64 Sum;$/;"	m	struct:__anon11
 SumSquared	.\src\main.h	/^    f64 SumSquared;$/;"	m	struct:__anon11
-TOKEN_TYPES	.\src\json_parse.h	/^    TOKEN_TYPES$/;"	e	enum:__anon4
-TOKEN_TYPES	.\src\json_parse.h	28;"	d
-TOKEN_TYPES	.\src\json_parse.h	51;"	d
-Terabyte	.\src\main.h	36;"	d
+TOKEN_TYPES	.\src\json_parse.h	/^    TOKEN_TYPES$/;"	e	enum:__anon3
+TOKEN_TYPES	.\src\json_parse.h	44;"	d
+TOKEN_TYPES	.\src\json_parse.h	67;"	d
 U16Reserves	.\src\main.h	/^    u64 U16Reserves;$/;"	m	struct:__anon12
 U8Reserves	.\src\main.h	/^    u64 U8Reserves;$/;"	m	struct:__anon12
-UTILS_H	.\src\utils.h	26;"	d
+UTILS_H	.\src\utils.h	27;"	d
 V	.\src\main.h	/^    u64 V;$/;"	m	struct:__anon12
-X	.\src\json_parse.h	41;"	d
-X	.\src\json_parse.h	43;"	d
-X	.\src\json_parse.h	47;"	d
-X	.\src\json_parse.h	49;"	d
+X	.\src\json_parse.h	57;"	d
+X	.\src\json_parse.h	59;"	d
+X	.\src\json_parse.h	63;"	d
+X	.\src\json_parse.h	65;"	d
 __GLOBALRandState	.\src\main.h	/^global_var rand_state __GLOBALRandState = {$/;"	v
-__assert_glue	.\src\utils.c	15;"	d	file:
-arena	.\src\json_parse.h	/^    mem_arena *arena;$/;"	m	struct:__anon10
+__assert_glue	.\src\utils.c	25;"	d	file:
+alloc_stride	.\src\utils.h	/^    usize alloc_stride;$/;"	m	struct:mem_arena
 arena	.\src\utils.h	/^    mem_arena *arena;$/;"	m	struct:__anon13
-arena_create	.\src\utils.c	/^arena_create(usize bytes_to_allocate) {$/;"	f
-array	.\src\json_parse.h	/^    json_value *array;$/;"	m	struct:__anon9
-assert	.\src\utils.c	23;"	d	file:
-assert_static	.\src\utils.c	17;"	d	file:
+arena_advance	.\src\utils.c	215;"	d	file:
+arena_create	.\src\utils.c	/^arena_create(usize bytes_to_allocate, usize bytes_to_reserve) {$/;"	f
+arena_current	.\src\utils.c	214;"	d	file:
+arena_free	.\src\utils.c	/^arena_free(mem_arena *arena) { return platform_free(arena->ptr, arena->size); }$/;"	f
+array	.\src\json_parse.h	/^    json_value **array;$/;"	m	struct:__anon8
+assert	.\src\utils.c	33;"	d	file:
+assert_static	.\src\utils.c	27;"	d	file:
 body	.\src\json_parse.h	/^    void *body;$/;"	m	struct:token
 bool	.\src\main.h	/^typedef int8_t bool;$/;"	t
-buffer	.\src\json_parse.h	/^} buffer;$/;"	t	typeref:struct:__anon3
-buffer_char	.\src\json_parse.c	/^buffer_char(buffer *json_buffer) {$/;"	f
+buffer	.\src\json_parse.h	/^} buffer;$/;"	t	typeref:struct:__anon2
+buffer_char	.\src\json_parse.c	/^buffer_char(buffer *json_buffer) { return json_buffer->str[json_buffer->current_idx]; }$/;"	f
 buffer_consume	.\src\json_parse.c	/^buffer_consume(buffer *json_buffer) { ++json_buffer->current_idx; }$/;"	f
 buffer_consume_extract_numeric	.\src\json_parse.c	/^buffer_consume_extract_numeric(string_value *str, buffer *json_buffer) {$/;"	f
 buffer_consume_ignores	.\src\json_parse.c	/^buffer_consume_ignores(buffer *json_buffer) {$/;"	f
 buffer_consume_until	.\src\json_parse.c	/^buffer_consume_until(buffer *json_buffer, char char_to_stop) {$/;"	f
 buffer_is_ignore	.\src\json_parse.c	/^buffer_is_ignore(buffer *json_buffer) {$/;"	f
 buffer_is_numeric	.\src\json_parse.c	/^buffer_is_numeric(buffer *json_buffer) {$/;"	f
-buffer_push_token	.\src\json_parse.c	/^buffer_push_token(token_type token_type, void *token_value, parser_state *token_memory) {$/;"	f
+buffer_push_token	.\src\json_parse.c	/^buffer_push_token(token_type token_type, void *token_value, parser_state *state) {$/;"	f
 buffer_to_cstring	.\src\json_parse.c	/^buffer_to_cstring(string_value *str, buffer *json_buffer) {$/;"	f
-content	.\src\json_parse.h	/^    json_value *content;$/;"	m	struct:__anon1
-content_bytes_size	.\src\json_parse.h	/^    u64 content_bytes_size;$/;"	m	struct:__anon10
-content_size	.\src\json_parse.h	/^    usize content_size; \/\/ size of `table` in bytes, used for jumping over this structure$/;"	m	struct:__anon8
-content_size	.\src\json_parse.h	/^    usize content_size; \/\/ size of `table` in bytes, used for jumping over this structure$/;"	m	struct:__anon9
+content	.\src\json_parse.h	/^    json_value *content;$/;"	m	struct:json_scope
+count	.\src\json_parse.h	/^        usize count; \/\/ Used with lexer, to keep count of a scope (dict\/list)$/;"	m	union:json_scope::__anon10
+count	.\src\json_parse.h	/^    usize count; \/\/ count of `table` structure, used for hash function modulus$/;"	m	struct:__anon7
 count	.\src\json_parse.h	/^    usize count;$/;"	m	struct:__anon8
-count	.\src\json_parse.h	/^    usize count;$/;"	m	struct:__anon9
 cstring_length	.\src\json_parse.c	/^cstring_length(char *c_string) {$/;"	f
-current_idx	.\src\json_parse.h	/^    usize current_idx;$/;"	m	struct:__anon3
-current_token	.\src\json_parse.h	/^    token *current_token;$/;"	m	struct:__anon10
-data	.\src\json_parse.h	/^    char *data;$/;"	m	struct:__anon2
-dict_content	.\src\json_parse.h	/^} dict_content;$/;"	t	typeref:struct:__anon7
+current_idx	.\src\json_parse.h	/^    usize current_idx;$/;"	m	struct:__anon2
+current_token	.\src\json_parse.h	/^    token *current_token;$/;"	m	struct:__anon9
+data	.\src\json_parse.h	/^    char *data;$/;"	m	struct:__anon1
+dict_kv	.\src\json_parse.h	/^} dict_kv;$/;"	t	typeref:struct:__anon6
 f32	.\src\main.h	/^typedef float f32;$/;"	t
 f64	.\src\main.h	/^typedef double f64;$/;"	t
 false	.\src\main.h	28;"	d
+generate_haversine_json	.\src\main.c	/^generate_haversine_json(u64 number_pairs, u64 num_clusters, char *filename) {$/;"	f
+gigabyte	.\src\utils.c	22;"	d	file:
+global_bytes_size	.\src\json_parse.h	/^    usize global_bytes_size;$/;"	m	struct:__anon9
 global_var	.\src\main.h	26;"	d
+haversine	.\src\main.c	/^haversine(f64 x0, f64 y0, f64 x1, f64 y1, f64 earth_radius) {$/;"	f
 i16	.\src\main.h	/^typedef int16_t i16;$/;"	t
 i32	.\src\main.h	/^typedef int32_t i32;$/;"	t
 i64	.\src\main.h	/^typedef int64_t i64;$/;"	t
 i8	.\src\main.h	/^typedef int8_t i8;$/;"	t
+idx	.\src\json_parse.h	/^        usize idx; \/\/ Index to be used in the context, set by routine to track dict and list free boundary.$/;"	m	union:json_scope::__anon10
 internal	.\src\main.h	24;"	d
-jp_dict_add	.\src\json_parse.c	/^jp_dict_add(json_dict *dict, string key, void *content, json_value_type type, parser_state mem) {$/;"	f
-jp_dict_create	.\src\json_parse.c	/^jp_dict_create(usize table_init_count, parser_state *current_memory) {$/;"	f
-jp_dict_get_value	.\src\json_parse.c	/^jp_dict_get_value(json_dict *dict, char *key) {$/;"	f
-jp_hash_from_string	.\src\json_parse.c	/^jp_hash_from_string(string str) {$/;"	f
+jp_add_to_scope	.\src\json_parse.c	/^jp_add_to_scope(json_scope *scope, json_value *j_value) {$/;"	f
+jp_dict_add_value	.\src\json_parse.c	/^jp_dict_add_value(json_scope *dict_scope, json_value *j_value) {$/;"	f
+jp_hash_from_string	.\src\json_parse.c	/^jp_hash_from_string(char *string) {$/;"	f
 jp_lexer	.\src\json_parse.c	/^jp_lexer(buffer *json_buffer, parser_state *state) {$/;"	f
-jp_list_add	.\src\json_parse.c	/^jp_list_add(json_list *list, void *content, json_value value) {$/;"	f
-jp_list_create	.\src\json_parse.c	/^jp_list_create(usize array_count, parser_state *state) {$/;"	f
-jp_list_get	.\src\json_parse.c	/^jp_list_get(json_list *list, usize index) {$/;"	f
+jp_list_add	.\src\json_parse.c	/^jp_list_add(json_scope *list_scope, json_value *j_value) {$/;"	f
+jp_load	.\src\json_parse.c	/^jp_load(char *Filename) {$/;"	f
 jp_parser	.\src\json_parse.c	/^jp_parser(parser_state *state) {$/;"	f
-json_dict	.\src\json_parse.h	/^} json_dict;$/;"	t	typeref:struct:__anon8
-json_list	.\src\json_parse.h	/^} json_list;$/;"	t	typeref:struct:__anon9
-json_value	.\src\json_parse.h	/^} json_value;$/;"	t	typeref:struct:__anon6
-json_value_type	.\src\json_parse.h	/^} json_value_type;$/;"	t	typeref:enum:__anon5
-jvt_dict	.\src\json_parse.h	/^    jvt_dict,$/;"	e	enum:__anon5
-jvt_float	.\src\json_parse.h	/^    jvt_float,$/;"	e	enum:__anon5
-jvt_int	.\src\json_parse.h	/^    jvt_int,$/;"	e	enum:__anon5
-jvt_list	.\src\json_parse.h	/^    jvt_list,$/;"	e	enum:__anon5
-jvt_str	.\src\json_parse.h	/^    jvt_str,$/;"	e	enum:__anon5
-key	.\src\json_parse.h	/^    char *key;$/;"	m	struct:__anon7
-length	.\src\json_parse.h	/^    usize length;$/;"	m	struct:__anon2
-linked_list	.\src\json_parse.h	/^} linked_list;$/;"	t	typeref:struct:__anon1
+jp_push_token_str_to_cstr	.\src\json_parse.c	/^jp_push_token_str_to_cstr(token *current_token, mem_arena *json_arena) {$/;"	f
+json	.\src\json_parse.h	/^    json_value *json;$/;"	m	struct:__anon9
+json_dict	.\src\json_parse.h	/^} json_dict;$/;"	t	typeref:struct:__anon7
+json_list	.\src\json_parse.h	/^} json_list;$/;"	t	typeref:struct:__anon8
+json_scope	.\src\json_parse.h	/^struct json_scope {$/;"	s
+json_scope	.\src\json_parse.h	/^typedef struct json_scope json_scope;$/;"	t	typeref:struct:json_scope
+json_value	.\src\json_parse.h	/^} json_value;$/;"	t	typeref:struct:__anon5
+json_value_type	.\src\json_parse.h	/^} json_value_type;$/;"	t	typeref:enum:__anon4
+jvt_dict	.\src\json_parse.h	/^    jvt_dict,$/;"	e	enum:__anon4
+jvt_float	.\src\json_parse.h	/^    jvt_float,$/;"	e	enum:__anon4
+jvt_int	.\src\json_parse.h	/^    jvt_int,$/;"	e	enum:__anon4
+jvt_list	.\src\json_parse.h	/^    jvt_list,$/;"	e	enum:__anon4
+jvt_str	.\src\json_parse.h	/^    jvt_str,$/;"	e	enum:__anon4
+key	.\src\json_parse.h	/^    char *key;$/;"	m	struct:__anon6
+kilobyte	.\src\utils.c	20;"	d	file:
+length	.\src\json_parse.h	/^    usize length;$/;"	m	struct:__anon1
 local_persist	.\src\main.h	25;"	d
 main	.\src\main.c	/^i32 main() {$/;"	f
 max_size	.\src\utils.h	/^    usize max_size; \/* NOTE(abid): Size of the memory we've reserved. *\/$/;"	m	struct:mem_arena
+megabyte	.\src\utils.c	21;"	d	file:
 mem_arena	.\src\utils.h	/^struct mem_arena {$/;"	s
 mem_arena	.\src\utils.h	/^typedef struct mem_arena mem_arena;$/;"	t	typeref:struct:mem_arena
 mem_temp_begin	.\src\utils.c	/^mem_temp_begin(mem_arena *arena) {$/;"	f
 mem_temp_end	.\src\utils.c	/^mem_temp_end(temp_memory temp_mem) {$/;"	f
-next	.\src\json_parse.h	/^    dict_content *next;$/;"	m	struct:__anon7
 next	.\src\json_parse.h	/^    token *next;$/;"	m	struct:token
-parent	.\src\json_parse.h	/^    linked_list *parent;$/;"	m	struct:__anon1
-parse_assert	.\src\json_parse.c	288;"	d	file:
-parse_err	.\src\json_parse.c	287;"	d	file:
-parser_state	.\src\json_parse.h	/^} parser_state;$/;"	t	typeref:struct:__anon10
+offload_to_buffer	.\src\main.c	/^offload_to_buffer(mem_arena *json_arena, mem_arena *result_arena, f64 y0, f64 y1, f64 x0, f64 x1,$/;"	f
+parent	.\src\json_parse.h	/^    json_scope *parent;$/;"	m	struct:json_scope
+parse_assert	.\src\json_parse.h	17;"	d
+parse_assert	.\src\json_parse.h	25;"	d
+parse_err	.\src\json_parse.h	16;"	d
+parse_err	.\src\json_parse.h	24;"	d
+parser_state	.\src\json_parse.h	/^} parser_state;$/;"	t	typeref:struct:__anon9
+platform_allocate	.\src\utils.c	/^platform_allocate(usize alloc_size) {$/;"	f
 platform_commit	.\src\utils.c	/^platform_commit(void *base_addr, usize commit_size) {$/;"	f
+platform_free	.\src\utils.c	/^platform_free(void *ptr, usize size) {$/;"	f
 platform_ram_size_get	.\src\utils.c	/^platform_ram_size_get() {$/;"	f
 platform_reserve	.\src\utils.c	/^platform_reserve(usize reserve_size) {$/;"	f
 ptr	.\src\utils.h	/^    void *ptr;$/;"	m	struct:mem_arena
-push_array	.\src\utils.c	141;"	d	file:
+push_array	.\src\utils.c	185;"	d	file:
 push_size	.\src\utils.c	/^push_size(usize size, mem_arena *arena) {$/;"	f
-push_struct	.\src\utils.c	140;"	d	file:
+push_struct	.\src\utils.c	184;"	d	file:
+radians_from_degrees	.\src\utils.c	/^radians_from_degrees(f64 degrees) {$/;"	f
+rand_range_f64	.\src\main.h	/^rand_range_f64(f64 Min, f64 Max) { return Min + RandF64() * (Max - Min); }$/;"	f
+rand_range_u64	.\src\main.h	/^rand_range_u64(u64 Min, u64 Max) { return Min + RandU64() % (Max-Min); }$/;"	f
+rand_seed	.\src\main.h	/^rand_seed(u64 Seed) {$/;"	f
 rand_state	.\src\main.h	/^} rand_state;$/;"	t	typeref:struct:__anon12
+read_text_file	.\src\json_parse.c	/^read_text_file(char *Filename) {$/;"	f
+scope_free_and_walk_up	.\src\json_parse.c	/^scope_free_and_walk_up(json_scope **scope_p, parser_state *state) {$/;"	f
+scope_free_list	.\src\json_parse.h	/^    json_scope *scope_free_list;$/;"	m	struct:__anon9
+scope_new	.\src\json_parse.c	/^scope_new(parser_state *state) {$/;"	f
 size	.\src\utils.h	/^    usize size; \/* NOTE(abid): Size of the memory we've committed *\/$/;"	m	struct:mem_arena
+square	.\src\utils.c	/^square(f64 a) {$/;"	f
 stat_f64	.\src\main.h	/^} stat_f64;$/;"	t	typeref:struct:__anon11
-str	.\src\json_parse.h	/^    char *str;$/;"	m	struct:__anon3
-string_char	.\src\json_parse.c	/^string_char(string str, usize idx) {$/;"	f
-string_is_equal	.\src\json_parse.c	/^string_is_equal(string str1, string str2) {$/;"	f
+stat_f64_accumulate	.\src\main.h	/^stat_f64_accumulate(f64 Value, stat_f64 *Stat) {$/;"	f
+str	.\src\json_parse.h	/^    char *str;$/;"	m	struct:__anon2
+str_len	.\src\main.c	/^str_len(char *str) {$/;"	f
 string_make	.\src\json_parse.c	/^string_make(char *c_string) {$/;"	f
-string_value	.\src\json_parse.h	/^} string_value;$/;"	t	typeref:struct:__anon2
-sub_arena_create	.\src\utils.c	/^sub_arena_create(usize size, mem_arena *arena) {$/;"	f
-table	.\src\json_parse.h	/^    dict_content *table;$/;"	m	struct:__anon8
+string_value	.\src\json_parse.h	/^} string_value;$/;"	t	typeref:struct:__anon1
+table	.\src\json_parse.h	/^    dict_kv *table;$/;"	m	struct:__anon7
+temp_arena	.\src\json_parse.h	/^    mem_arena *temp_arena;$/;"	m	struct:__anon9
 temp_count	.\src\utils.h	/^    u32 temp_count;$/;"	m	struct:mem_arena
 temp_memory	.\src\utils.h	/^} temp_memory;$/;"	t	typeref:struct:__anon13
+terabyte	.\src\utils.c	23;"	d	file:
 token	.\src\json_parse.h	/^struct token {$/;"	s
 token	.\src\json_parse.h	/^typedef struct token token;$/;"	t	typeref:struct:token
 token_advance	.\src\json_parse.c	/^token_advance(token **tok) { *tok = (*tok)->next; }$/;"	f
 token_expect	.\src\json_parse.c	/^token_expect(token *tok, token_type tok_type) {$/;"	f
-token_list	.\src\json_parse.h	/^    token *token_list;$/;"	m	struct:__anon10
+token_list	.\src\json_parse.h	/^    token *token_list;$/;"	m	struct:__anon9
 token_peek	.\src\json_parse.c	/^token_peek(token *tok, usize forward_count) {$/;"	f
-token_type	.\src\json_parse.h	/^} token_type;$/;"	t	typeref:enum:__anon4
+token_type	.\src\json_parse.h	/^} token_type;$/;"	t	typeref:enum:__anon3
 token_type_str	.\src\json_parse.h	/^char *token_type_str[] = {$/;"	v
 true	.\src\main.h	27;"	d
-type	.\src\json_parse.h	/^    json_value_type type;$/;"	m	struct:__anon6
+type	.\src\json_parse.h	/^    json_value_type type;$/;"	m	struct:__anon5
 type	.\src\json_parse.h	/^    token_type type;$/;"	m	struct:token
 u16	.\src\main.h	/^typedef uint16_t u16;$/;"	t
 u32	.\src\main.h	/^typedef uint32_t u32;$/;"	t
@@ -161,4 +168,4 @@ uintptr	.\src\main.h	/^typedef uintptr_t uintptr;$/;"	t
 used	.\src\utils.h	/^    usize used;$/;"	m	struct:__anon13
 used	.\src\utils.h	/^    usize used;$/;"	m	struct:mem_arena
 usize	.\src\main.h	/^typedef size_t usize;$/;"	t
-value	.\src\json_parse.h	/^    json_value *value;$/;"	m	struct:__anon7
+value	.\src\json_parse.h	/^    json_value *value;$/;"	m	struct:__anon6

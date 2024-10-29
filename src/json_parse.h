@@ -11,8 +11,16 @@
 
 #if !defined(JSON_PARSE_H)
 
-/* TODO(abid): Make sure for clang we keep the __VA_OPT__, but remove for others. */
 /* NOTE(abid): Parser routines. */
+#ifdef PLT_WIN
+#define parse_err(str, ...) fprintf(stderr, "parse error: " str "\n", __VA_ARGS__)
+#define parse_assert(expr, str, ...)                \
+    if((expr)) { }                                  \
+    else {                                          \
+        parse_err(str, ##__VA_ARGS__); \
+        exit(EXIT_FAILURE);                         \
+    }
+#elif PLT_LINUX
 #define parse_err(str, ...) fprintf(stderr, "parse error: " str "\n" __VA_OPT__(,) __VA_ARGS__)
 #define parse_assert(expr, str, ...)                \
     if((expr)) { }                                  \
@@ -20,6 +28,8 @@
         parse_err(str __VA_OPT__(,) ##__VA_ARGS__); \
         exit(EXIT_FAILURE);                         \
     }
+
+#endif
 
 typedef struct {
     char *data;
@@ -96,7 +106,7 @@ typedef struct {
 
 typedef struct json_scope json_scope;
 typedef struct {
-    json_dict *json;
+    json_value *json;
 
     mem_arena *temp_arena;
     token *token_list;
@@ -117,5 +127,6 @@ struct json_scope {
     };
     json_scope *parent;
 };
+
 #define JSON_PARSE_H
 #endif
