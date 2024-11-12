@@ -6,26 +6,6 @@
     |                                                                                  |
     +======================================| Copyright © Sayed Abid Hashimi |==========+  */
 
-/* NOTE(abid):
- * Dictionary memory layout:
- * - table
- *   - void *
- *   - void *
- *   ...
- *
- * - dict_content
- * - dict_content
- *   ...
- *
-   NOTE(abid): 
- * List memory layout:
- * - void *
- * - json_value
- * - void *
- * - json_value
- *   ...
- */
-
 #include "json_parse.h"
 
 /* NOTE(abid): Lexer routines. */
@@ -287,106 +267,6 @@ jp_list_add(json_scope *list_scope, json_value *j_value) {
     list_scope->idx++;
 }
 
-#if 0
-internal json_list *
-jp_list_create(usize array_count, parser_state *state) {
-    /* NOTE(abid): `array_count` should be the final size of the current array (non-growable). */
-    json_list *result = push_size(sizeof(json_list) + sizeof(json_value)*array_count, state->arena);
-    result->array = result + 1;
-    result->max_count = array_count;
-    result->count = 0;
-
-    return result;
-}
-
-internal json_value *
-jp_list_get(json_list *list, usize index) {
-    assert(list->count > index, "index out of bound");
-    return list->array + index;
-}
-#endif
-
-/* NOTE(abid): Dictionary routines. */
-#if 0
-inline internal json_dict *
-jp_dict_create(usize table_init_count, parser_state *current_memory) {
-    json_dict *result = push_size(sizeof(json_dict) + sizeof(dict_content)*table_init_count,
-                                  state->arena);
-    result->table = result + 1;
-    result->count = table_init_count;
-
-    return result;
-}
-
-internal void
-jp_dict_add(json_dict *dict, string_value key, void *content, json_value_type type, parser_state mem) {
-    /* NOTE(abid): We expect `key` and `content` be valid until end of program.
-     *             i.e. we won't do the allocation here. */
-    u32 hash = hash_from_string(key);
-    dict_content *slot = dict->table + (hash % dict->count);
-
-    /* NOTE(abid): Check for collision hits. */
-    dict_content *next_slot = slot;
-    for(;next_slot;) {
-        assert(string_is_equal(ckey, next_slot->key), "adding key duplicated.");
-        slot = next_slot;
-        next_slot = slot->next;
-    }
-    slot->next = push_struct(dict_content, mem);
-    slot = slot->next;
-
-    slot->key = ckey;
-    slot->value = value; 
-}
-
-internal json_value *
-jp_dict_get_value(json_dict *dict, char *key) {
-    u32 hash = hash_from_string(key);
-    dict_content *slot = dict->table + (hash % dict->table_count);
-
-    /* NOTE(abid): Check if object exist, as well as collision. */
-    for(;slot;) {
-        if(strcmp(slot->key, key) == 0) return slot->value;
-        slot = slot->new;
-    }
-
-    /* NOTE(abid): If we reach here, then we've gone and done it now. */
-    assert(0, "key %s not found.", key);
-}
-
-internal u32
-jp_hash_from_string(string str) {
-    u32 result = 0;
-    for(i32 idx = 0; idx < str.length; ++idx) {
-        result = ((result << 5) - result) + (u32)str.data[idx];
-    }
-    return result;
-}
-
-inline internal bool
-string_is_equal(string str1, string str2) {
-    if(str1.length != str2.length) return false;
-
-    for(u32 idx = 0; idx < str1.length; ++idx) {
-        if(str1.data[idx] != str2.data[idx]) return false;
-    }
-
-    return true;
-}
-
-internal dict_content **
-jp_dict_get_empty(json_dict *dict, char *string) {
-    u32 hash = hash_from_string(string);
-    dict_content *slot = dict->table + (hash % dict->table_count);
-
-    /* NOTE(abid): Check for collision */
-    if(slot == NULL) return slot;
-    do { slot = slot->next; } while(slot);
-
-    return &slot;
-}
-#endif
-
 inline internal void
 token_expect(token *tok, token_type tok_type) {
     parse_assert(tok->type == tok_type, "expected token [%s], got [%s]\n",
@@ -567,7 +447,6 @@ read_text_file(char *Filename) {
     fclose(FileHandle);
 
     Result.str = Content;
-    // Result.str.length = BytesRead - 1; // -1 for the \0 at the end of the buffer
     Result.current_idx = 0;
 
     return Result;
@@ -592,6 +471,8 @@ jp_load(char *Filename) {
     return (json_dict *)(state.json + 1);
 }
 
+
+/* NOTE(abid): Json getter routines. */
 #define jp_get_dict_value(dict, key, type) (type*)(_jp_get_dict_value(dict, key) + 1)
 internal json_value *
 _jp_get_dict_value(json_dict *dict, char *key) {
