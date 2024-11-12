@@ -137,6 +137,17 @@ scope_new(parser_state *state) {
     return scope;
 }
 
+internal char *
+jp_push_str_to_cstr(string_value *str, mem_arena *json_arena) {
+    // string_value *str = (string_value *)current_token->body;
+    char *c_str = push_size(str->length+1, json_arena);
+    for(u32 idx = 0; idx < str->length; ++idx) c_str[idx] = str->data[idx];
+    c_str[str->length] = '\0';
+
+    return c_str;
+}
+
+
 internal void
 jp_lexer(buffer *json_buffer, parser_state *state) {
     /* TODO(abid): Guard against using comma at the end of a scope. */
@@ -147,8 +158,9 @@ jp_lexer(buffer *json_buffer, parser_state *state) {
         buffer_consume_ignores(json_buffer);
         switch(json_buffer->str[json_buffer->current_idx]) {
             case '"': {
+                // 20(dict) + 5(str) + 8(int) + 4(dict_value) + 16(kv) = 53
+                // + 16 + ?(int)
                 /* TODO(abid): No support for Unicode - 24.Sep.2024 */
-                // string_value *str = push_struct(string_value, memory);
                 string_value *str_value = push_struct(string_value, state->temp_arena);
                 buffer_to_cstring(str_value, json_buffer);
                 buffer_consume_ignores(json_buffer);
@@ -158,7 +170,7 @@ jp_lexer(buffer *json_buffer, parser_state *state) {
                     buffer_consume(json_buffer);
                 } else {
                     buffer_push_token(tt_value_str, (void *)str_value, state);
-                    state->global_bytes_size += sizeof(json_value);
+                    state->global_bytes_size += sizeof(json_value) + sizeof(char *);
                     assert(scope != NULL, "scope cannot be NULL"); ++scope->count;
                 }
                 state->global_bytes_size += str_value->length+1;
@@ -191,13 +203,13 @@ jp_lexer(buffer *json_buffer, parser_state *state) {
                 buffer_push_token(tt_dict_end, 0, state); buffer_consume(json_buffer);
                 state->global_bytes_size += scope->count*sizeof(dict_kv);
 
-                scope_free_and_walk_up(&scope, state);
+                scope = scope->parent;
             } break;
             case ']': {
                 buffer_push_token(tt_list_end, 0, state); buffer_consume(json_buffer);
                 state->global_bytes_size += scope->count*sizeof(json_value *);
 
-                scope_free_and_walk_up(&scope, state);
+                scope = scope->parent;
             } break;
             case '\0': { buffer_push_token(tt_eot, 0, state); buffer_consume(json_buffer); } break;
             case '\t':
@@ -207,16 +219,18 @@ jp_lexer(buffer *json_buffer, parser_state *state) {
             case ' ': { buffer_consume_ignores(json_buffer); } break;
             default: {
                 if(buffer_is_numeric(json_buffer)) {
-                    string_value *str = push_struct(string_value, state->temp_arena);
-                    bool is_float = buffer_consume_extract_numeric(str, json_buffer);
+                    // string_value *str = push_struct(string_value, state->temp_arena);
+                    string_value str = {0};
+                    bool is_float = buffer_consume_extract_numeric(&str, json_buffer);
+                    /* NOTE(abid): For numeric, since str is temporary, it is better to alloc here. */
+                    char *num_str = jp_push_str_to_cstr(&str, state->temp_arena);
                     if(is_float) {
                         /* NOTE(abid): Float is 64-bit. */
-                        buffer_push_token(tt_value_float, str, state);
-
+                        buffer_push_token(tt_value_float, num_str, state);
                         state->global_bytes_size += sizeof(f64);
                     } else {
                         /* NOTE(abid): Integer is 64-bit */
-                        buffer_push_token(tt_value_int, str, state);
+                        buffer_push_token(tt_value_int, num_str, state);
                         state->global_bytes_size += sizeof(i64);
                     }
                     assert(scope != NULL, "scope cannot be NULL"); ++scope->count;
@@ -393,7 +407,7 @@ token_peek(token *tok, usize forward_count) {
 }
 
 internal void
-jp_dict_add_value(json_scope *dict_scope, json_value *j_value) {
+jp_dict_add(json_scope *dict_scope, json_value *j_value) {
     json_dict *parent_dict = (json_dict *)(dict_scope->content+1);
     dict_kv *kv_element = parent_dict->table + dict_scope->idx;
     parse_assert(kv_element && kv_element->key != NULL, "value must have associated key inside dict.");
@@ -404,19 +418,9 @@ jp_dict_add_value(json_scope *dict_scope, json_value *j_value) {
 inline internal void
 jp_add_to_scope(json_scope *scope, json_value *j_value) {
     /* NOTE(abid): Add the json_value to the current scope (dict/list). */
-    json_value *parent_value = (json_value *)(scope->content+1);
-    if(parent_value->type == jvt_dict) jp_dict_add_value(scope, j_value);
-    else if(parent_value->type == jvt_list) jp_list_add(scope, j_value);
-}
-
-internal char *
-jp_push_token_str_to_cstr(token *current_token, mem_arena *json_arena) {
-    string_value *str = (string_value *)current_token->body;
-    char *c_str = push_size(str->length+1, json_arena);
-    for(u32 idx = 0; idx < str->length; ++idx) c_str[idx] = str->data[idx];
-    c_str[str->length] = '\0';
-
-    return c_str;
+    if(scope->content->type == jvt_dict) jp_dict_add(scope, j_value);
+    else if(scope->content->type == jvt_list) jp_list_add(scope, j_value);
+    else assert(0, "cannot add value to other than list/dict");
 }
 
 internal void 
@@ -439,13 +443,13 @@ jp_parser(parser_state *state) {
                 j_value->type = jvt_dict;
                 json_dict *dict = (json_dict *)(j_value+1);
 
-                json_scope *l_scope = (json_scope *)current_token->body;
-                dict->count = l_scope->count;
+                json_scope *this_scope = (json_scope *)current_token->body;
+                dict->count = this_scope->count;
                 dict->table = push_size(dict->count*sizeof(dict_kv), json_arena);
 
                 /* NOTE(abid): If are not at the root dictionary, then must add to parent. */
                 if(scope != NULL) jp_add_to_scope(scope, j_value);
-                json_scope *this_scope = scope_new(state);
+                // json_scope *this_scope = scope_new(state);
                 this_scope->content = j_value;
                 this_scope->parent = scope;
                 this_scope->idx = 0;
@@ -458,12 +462,11 @@ jp_parser(parser_state *state) {
                 j_value->type = jvt_list;
                 json_list *list = (json_list *)(j_value+1);
 
-                json_scope *l_scope = (json_scope *)current_token->body;
-                list->count = l_scope->count;
+                json_scope *this_scope = (json_scope *)current_token->body;
+                list->count = this_scope->count;
                 list->array = push_size(list->count*sizeof(json_value *), json_arena);
 
                 jp_add_to_scope(scope, j_value);
-                json_scope *this_scope = scope_new(state);
                 this_scope->content = j_value;
                 this_scope->parent = scope;
                 this_scope->idx = 0;
@@ -480,7 +483,7 @@ jp_parser(parser_state *state) {
                 json_dict *parent_dict = (json_dict *)(scope->content+1);
                 // dict_kv *kv_element = parent_dict->table + scope->idx;
 
-                char *key = jp_push_token_str_to_cstr(current_token, json_arena);
+                char *key = jp_push_str_to_cstr((string_value *)current_token->body, json_arena);
                 usize hash = jp_hash_from_string(key);
                 usize original_idx = (hash % parent_dict->count);
 
@@ -504,8 +507,7 @@ jp_parser(parser_state *state) {
                 j_value->type = jvt_float;
                 f64 *value = (f64 *)(j_value+1);
 
-                char *end;
-                char *float_str = jp_push_token_str_to_cstr(current_token, json_arena);
+                char *end; char *float_str = (char *)current_token->body;
                 *value = strtod(float_str, &end);
 
                 jp_add_to_scope(scope, j_value);
@@ -517,7 +519,7 @@ jp_parser(parser_state *state) {
                 j_value->type = jvt_int;
                 i64 *value = (i64 *)(j_value+1);
 
-                char *int_str = jp_push_token_str_to_cstr(current_token, json_arena);
+                char *int_str = (char *)current_token->body;
                 *value = atol(int_str);
 
                 jp_add_to_scope(scope, j_value);
@@ -527,8 +529,10 @@ jp_parser(parser_state *state) {
 
                 json_value *j_value = push_size(sizeof(json_value) + sizeof(char *), json_arena);
                 j_value->type = jvt_str;
-                char *value = (char *)(j_value+1);
-                value = jp_push_token_str_to_cstr(current_token, json_arena);
+                char **value = (char **)(j_value+1);
+                *value = jp_push_str_to_cstr((string_value *)current_token->body, json_arena);
+
+                jp_add_to_scope(scope, j_value);
             } break;
 
             default: assert(0, "invalid code path in parser");
@@ -569,7 +573,7 @@ read_text_file(char *Filename) {
     return Result;
 }
 
-internal json_value *
+internal json_dict *
 jp_load(char *Filename) {
     buffer Buffer = read_text_file(Filename);
     usize physical_mem_max_size = platform_ram_size_get();
@@ -585,5 +589,30 @@ jp_load(char *Filename) {
 
     arena_free(state.temp_arena);
 
-    return state.json;
+    return (json_dict *)(state.json + 1);
+}
+
+#define jp_get_dict_value(dict, key, type) (type*)(_jp_get_dict_value(dict, key) + 1)
+internal json_value *
+_jp_get_dict_value(json_dict *dict, char *key) {
+    usize original_idx = jp_hash_from_string(key) % dict->count;
+    usize potential_idx = original_idx;
+
+    dict_kv *kv_element = NULL;
+    while(true) {
+        kv_element = dict->table + potential_idx;
+        if(strcmp(kv_element->key, key) == 0) break;
+
+        potential_idx = (potential_idx+1) % dict->count;
+        parse_assert(original_idx != potential_idx, "count not find key in dictionary.");
+    }
+
+    return kv_element->value;
+}
+
+#define jp_get_list_elem(list, idx, type) (type*)(_jp_get_list_elem(list, idx) + 1)
+internal inline json_value *
+_jp_get_list_elem(json_list *list, usize idx) {
+    assert(idx < list->count, "index out of bounds");
+    return list->array[idx];
 }

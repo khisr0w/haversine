@@ -187,11 +187,20 @@ generate_haversine_json(u64 number_pairs, u64 num_clusters, char *filename) {
     return haversine_stat;
 }
 
+
 i32 main() {
-    json_value *base_json = jp_load("..\\..\\test.json");
-    base_json++;
-    //json_value *value1 = jp_dict_get(base_json, "key");
-    //json_value *value1 = jp_list_get(value1, 3);
+    json_dict *base_json = jp_load("test.json");
+    json_list *list = jp_get_dict_value(base_json, "lst", json_list);
+    char **first = jp_get_list_elem(list, 0, char *);
+    i64 *second = jp_get_list_elem(list, 1, i64);
+    char **third = jp_get_list_elem(list, 2, char *);
+    i64 *fourth = jp_get_list_elem(list, 3, i64);
+    printf("%s\n", *first);
+    printf("%ld\n", *second);
+    printf("%s\n", *third);
+    printf("%ld\n", *fourth);
+
+    printf("%f\n", *jp_get_dict_value(base_json, "mid", f64));
 
     return 0;
 }

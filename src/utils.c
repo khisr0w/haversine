@@ -51,6 +51,9 @@ radians_from_degrees(f64 degrees) {
     return result;
 }
 
+
+
+
 /* NOTE(abid): Get the physical memory (RAM) size. */
 inline internal usize
 platform_ram_size_get() {
@@ -59,7 +62,9 @@ platform_ram_size_get() {
     GlobalMemoryStatusEx(&mem_stat);
     return mem_stat.ullTotalPhys;
 #elif PLT_LINUX
-    return getpagesize();
+    long pages = sysconf(_SC_PHYS_PAGES);
+    long page_size = sysconf(_SC_PAGE_SIZE);
+    return pages * page_size;
 #endif
 }
 
@@ -72,7 +77,7 @@ platform_allocate(usize alloc_size) {
             exit(EXIT_FAILURE);
     }
 #elif PLT_LINUX
-    void *result = mmap(NULL, alloc_size, PROT_READ | PROT_WRITE, MAP_SHARED | MAP_ANONYMOUS | MAP_FIXED, -1, 0);
+    void *result = mmap(NULL, alloc_size, PROT_READ | PROT_WRITE, MAP_SHARED | MAP_ANONYMOUS, -1, 0);
     if(result == MAP_FAILED) {
         perror("mmap");
         exit(EXIT_FAILURE);
@@ -91,7 +96,8 @@ platform_reserve(usize reserve_size) {
         exit(EXIT_FAILURE);
     }
 #elif PLT_LINUX
-    void *result = mmap(NULL, reserve_size, PROT_NONE, MAP_PRIVATE | MAP_ANONYMOUS | MAP_SHARED | MAP_FIXED, -1, 0);
+    // void *result = mmap(NULL, reserve_size, PROT_NONE, MAP_ANONYMOUS | MAP_SHARED, -1, 0);
+    void *result = mmap(NULL, reserve_size, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS | MAP_NORESERVE, -1, 0);
     if(result == MAP_FAILED) {
         perror("mmap");
         exit(EXIT_FAILURE);
@@ -111,12 +117,13 @@ platform_commit(void *base_addr, usize commit_size) {
         exit(EXIT_FAILURE);
     }
 #elif PLT_LINUX
-    void *result = mmap(base_addr, commit_size, PROT_READ | PROT_WRITE,
-                        MAP_SHARED | MAP_ANONYMOUS | MAP_FIXED, -1, 0);
-    if(result == MAP_FAILED) {
-        perror("mmap");
+    // void *result = mmap(base_addr, commit_size, PROT_READ | PROT_WRITE,
+    //                     MAP_SHARED | MAP_ANONYMOUS | MAP_FIXED, -1, 0);
+    if (madvise(base_addr, commit_size, MADV_WILLNEED) == -1) {
+        perror("madvise failed");
         exit(EXIT_FAILURE);
     }
+    void *result = base_addr;
 #endif 
 
     return result;
@@ -161,18 +168,20 @@ mem_temp_end(temp_memory temp_mem) {
  * shrinking the memory. Figure out if the added computation is worth it. - 28.Sep.2024 */
 internal mem_arena *
 arena_create(usize bytes_to_allocate, usize bytes_to_reserve) {
-    usize physical_mem_max_size = bytes_to_reserve;
+    assert(bytes_to_reserve >= bytes_to_allocate, "reserve size smaller than commit");
+
+    // usize physical_mem_max_size = bytes_to_reserve;
     /* TODO(abid): Probably need to get rid of the ram branch here, user can decide. - 16.Oct.2024 */
-    if(bytes_to_reserve == 0) physical_mem_max_size = platform_ram_size_get();
+    if(bytes_to_reserve == 0) bytes_to_reserve = platform_ram_size_get() - sizeof(mem_arena);
     
-    void *base_addr = platform_reserve(physical_mem_max_size);
+    void *base_addr = platform_reserve(bytes_to_reserve);
     mem_arena *arena = platform_commit(base_addr, sizeof(mem_arena) + bytes_to_allocate);
     /* TODO(abid): Probably need to remove this, most OS already zero out the memory. Investigate. */
     memset(arena, 0, bytes_to_allocate);
     arena->ptr = (void *)(arena + 1);
     arena->size = bytes_to_allocate;
     arena->used = 0;
-    arena->max_size = physical_mem_max_size;
+    arena->max_size = bytes_to_reserve;
     arena->alloc_stride = bytes_to_allocate; /* NOTE(abid): How much to commit when memory is full. Check `push_size`. */
 
     return arena;
@@ -186,8 +195,8 @@ arena_free(mem_arena *arena) { return platform_free(arena->ptr, arena->size); }
 internal void *
 push_size(usize size, mem_arena *arena) {
     /* NOTE(abid): If out of memory commit more memory. */
-    if(arena->used + size >= arena->size) {
-        assert(arena->used + size < arena->max_size, "out of memory. Sorry.");
+    if(arena->used + size > arena->size) {
+        assert(arena->used + size <= arena->max_size, "out of memory. Sorry.");
 
         u64 size_to_allocate = (arena->alloc_stride > size) ? arena->alloc_stride : size;
         platform_commit((u8 *)arena->ptr + size, size_to_allocate);
