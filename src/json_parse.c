@@ -127,7 +127,6 @@ jp_push_str_to_cstr(string_value *str, mem_arena *json_arena) {
     return c_str;
 }
 
-
 internal void
 jp_lexer(buffer *json_buffer, parser_state *state) {
     /* TODO(abid): Guard against using comma at the end of a scope. */
@@ -191,7 +190,7 @@ jp_lexer(buffer *json_buffer, parser_state *state) {
 
                 scope = scope->parent;
             } break;
-            case '\0': { buffer_push_token(tt_eot, 0, state); buffer_consume(json_buffer); } break;
+            // case '\0': { buffer_push_token(tt_eot, 0, state); buffer_consume(json_buffer); } break;
             case '\t':
             case '\n':
             case '\r':
@@ -219,6 +218,7 @@ jp_lexer(buffer *json_buffer, parser_state *state) {
             }
         }
     }
+    buffer_push_token(tt_eot, 0, state); buffer_consume(json_buffer);
 
     state->current_token = state->token_list;
 }
@@ -421,40 +421,42 @@ jp_parser(parser_state *state) {
     }
 }
 
-internal buffer 
-read_text_file(char *Filename) {
-    buffer Result = {0};
-    FILE *FileHandle = fopen(Filename, "rb");
+internal void *
+read_file(char *filename, usize object_size) {
+    FILE *handle = fopen(filename, "rb");
+    assert(handle != NULL, "file could not be opened.");
 
     /* NOTE(abid): Get the size of the File */
-    fseek(FileHandle, 0, SEEK_END);
-    usize FileSize = ftell(FileHandle);
-    rewind(FileHandle);
+    fseek(handle, 0, SEEK_END);
+    usize file_size = ftell(handle);
+    rewind(handle);
 
-    /* NOTE(abid): Read into the start of the main memory. */
-    char* Content = platform_allocate(FileSize);
-    if (Content == NULL) {
-        fclose(FileHandle);
-        Assert(false, "could not allocate memory");
+    /* NOTE(abid): Create buffer. */
+    void* content = platform_allocate(file_size);
+    if (content == NULL) {
+        fclose(handle);
+        assert(false, "could not allocate memory");
     }
 
-    size_t BytesRead = fread(Content, 1, FileSize, FileHandle);
-    if (BytesRead != FileSize) {
-        fclose(FileHandle);
-        free(Content);
-        Assert(false, "could not load file into memory");
+    usize num_values = file_size/object_size;
+    /* NOTE(abid): Read into the buffer */
+    size_t number_of_read = fread(content, object_size, num_values, handle);
+    if (number_of_read != num_values) {
+        fclose(handle);
+        platform_free(content, file_size);
+        assert(false, "could not load file into memory");
     }
-    fclose(FileHandle);
+    fclose(handle);
 
-    Result.str = Content;
-    Result.current_idx = 0;
-
-    return Result;
+    return content;
 }
 
 internal json_dict *
 jp_load(char *Filename) {
-    buffer Buffer = read_text_file(Filename);
+    buffer buffer = {
+        .str = (char *)read_file(Filename, /*object_size=*/1),
+        .current_idx = 0
+    };
     usize physical_mem_max_size = platform_ram_size_get();
     parser_state state = {
         .json = NULL,
@@ -463,7 +465,7 @@ jp_load(char *Filename) {
         .current_token = NULL
     };
 
-    jp_lexer(&Buffer, &state);
+    jp_lexer(&buffer, &state);
     jp_parser(&state);
 
     arena_free(state.temp_arena);

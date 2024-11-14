@@ -51,8 +51,14 @@ radians_from_degrees(f64 degrees) {
     return result;
 }
 
-
-
+internal usize
+platform_get_page_size() {
+#ifdef PLT_WIN
+    assert(0, "NotImplemented.");
+#elif PLT_LINUX
+    return sysconf(_SC_PAGE_SIZE);
+#endif
+}
 
 /* NOTE(abid): Get the physical memory (RAM) size. */
 inline internal usize
@@ -63,8 +69,7 @@ platform_ram_size_get() {
     return mem_stat.ullTotalPhys;
 #elif PLT_LINUX
     long pages = sysconf(_SC_PHYS_PAGES);
-    long page_size = sysconf(_SC_PAGE_SIZE);
-    return pages * page_size;
+    return pages * platform_get_page_size();
 #endif
 }
 
@@ -97,7 +102,7 @@ platform_reserve(usize reserve_size) {
     }
 #elif PLT_LINUX
     // void *result = mmap(NULL, reserve_size, PROT_NONE, MAP_ANONYMOUS | MAP_SHARED, -1, 0);
-    void *result = mmap(NULL, reserve_size, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS | MAP_NORESERVE, -1, 0);
+    void *result = mmap(NULL, reserve_size, PROT_NONE | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS | MAP_NORESERVE, -1, 0);
     if(result == MAP_FAILED) {
         perror("mmap");
         exit(EXIT_FAILURE);
@@ -119,7 +124,7 @@ platform_commit(void *base_addr, usize commit_size) {
 #elif PLT_LINUX
     // void *result = mmap(base_addr, commit_size, PROT_READ | PROT_WRITE,
     //                     MAP_SHARED | MAP_ANONYMOUS | MAP_FIXED, -1, 0);
-    if (madvise(base_addr, commit_size, MADV_WILLNEED) == -1) {
+    if(mprotect(base_addr, commit_size, PROT_READ | PROT_WRITE) != 0) {
         perror("madvise failed");
         exit(EXIT_FAILURE);
     }
@@ -164,21 +169,37 @@ mem_temp_end(temp_memory temp_mem) {
     --arena->temp_count;
 }
 
+/* NOTE(abid): To make sure we always have size on a page boundary. */
+internal usize
+ceil_to_page_size(usize size) {
+    usize page_size = platform_get_page_size();
+
+    usize result = page_size;
+    if(size > page_size) {
+        usize factor = (usize)(size / page_size);
+        result = page_size*(factor + (usize)(size % page_size != 0));
+    }
+
+    return result;
+}
+
 /* TODO: We are not keeping track of the committed pages yet, which means we have no way of
  * shrinking the memory. Figure out if the added computation is worth it. - 28.Sep.2024 */
 internal mem_arena *
 arena_create(usize bytes_to_allocate, usize bytes_to_reserve) {
+    bytes_to_allocate = ceil_to_page_size(bytes_to_allocate);
+    bytes_to_reserve = ceil_to_page_size(bytes_to_reserve);
     assert(bytes_to_reserve >= bytes_to_allocate, "reserve size smaller than commit");
 
     // usize physical_mem_max_size = bytes_to_reserve;
     /* TODO(abid): Probably need to get rid of the ram branch here, user can decide. - 16.Oct.2024 */
     if(bytes_to_reserve == 0) bytes_to_reserve = platform_ram_size_get() - sizeof(mem_arena);
-    
+
+    mem_arena *arena = (mem_arena *)platform_allocate(sizeof(mem_arena));
     void *base_addr = platform_reserve(bytes_to_reserve);
-    mem_arena *arena = platform_commit(base_addr, sizeof(mem_arena) + bytes_to_allocate);
+    arena->ptr = platform_commit(base_addr, bytes_to_allocate);
     /* TODO(abid): Probably need to remove this, most OS already zero out the memory. Investigate. */
-    memset(arena, 0, bytes_to_allocate);
-    arena->ptr = (void *)(arena + 1);
+    memset(arena->ptr, 0, bytes_to_allocate);
     arena->size = bytes_to_allocate;
     arena->used = 0;
     arena->max_size = bytes_to_reserve;
@@ -188,7 +209,9 @@ arena_create(usize bytes_to_allocate, usize bytes_to_reserve) {
 }
 
 inline internal bool
-arena_free(mem_arena *arena) { return platform_free(arena->ptr, arena->size); }
+arena_free(mem_arena *arena) { 
+    return platform_free(arena->ptr, arena->size) && platform_free(arena, sizeof(arena));
+}
 
 #define push_struct(type, arena) (type *)push_size(sizeof(type), arena)
 #define push_array(type, count, arena) (type *)push_size((count)*sizeof(type), arena)
@@ -198,8 +221,9 @@ push_size(usize size, mem_arena *arena) {
     if(arena->used + size > arena->size) {
         assert(arena->used + size <= arena->max_size, "out of memory. Sorry.");
 
-        u64 size_to_allocate = (arena->alloc_stride > size) ? arena->alloc_stride : size;
-        platform_commit((u8 *)arena->ptr + size, size_to_allocate);
+        u64 size_to_allocate = (arena->alloc_stride > size) ? arena->alloc_stride
+                                                            : ceil_to_page_size(size);
+        platform_commit((u8 *)arena->ptr + arena->size, size_to_allocate);
         arena->size += size_to_allocate;
     }
 
@@ -209,28 +233,5 @@ push_size(usize size, mem_arena *arena) {
     return result;
 }
 
-#if 0
-internal void *
-push_size_arena(mem_arena *Arena, usize Size){
-    Assert(Arena->used + Size < Arena->size, "not enough arena memory");
-    void *Result = (u8 *)Arena->ptr + Arena->used;
-    Arena->used += Size;
-
-    return Result;
-}
-#endif
-
 #define arena_current(Arena) (void *)((u8 *)(Arena)->ptr + (Arena)->used)
 #define arena_advance(Arena, Number, Type) (Arena)->used += sizeof(Type)*(Number)
-
-#if 0
-inline internal mem_arena
-sub_arena_create(usize size, mem_arena *arena) {
-    mem_arena sub_arena = {0};
-    sub_arena.size = size;
-    sub_arena.ptr = push_size_arena(arena, sub_arena.size);
-    sub_arena.used = 0;
-
-    return sub_arena;
-}
-#endif

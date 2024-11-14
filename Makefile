@@ -9,7 +9,7 @@ RELEASE_DIR := $(BIN_DIR)/release
 
 # Compiler and flags
 CC := clang
-CFLAGS_COMMON := -fno-caret-diagnostics -Wno-null-dereference -DPLT_LINUX #/EHa /nologo /FC /Zo /WX /W4 /Gm- /wd5208 /wd4505
+CFLAGS_COMMON := -fno-caret-diagnostics -Wno-null-dereference -DPLT_LINUX -lm #/EHa /nologo /FC /Zo /WX /W4 /Gm- /wd5208 /wd4505
 CFLAGS_DEBUG := -g #/Od /MTd /Z7 /Zo /DDEBUG
 CFLAGS_RELEASE := #/O2 /Oi /MT /DRELEASE
 
