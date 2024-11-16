@@ -20,7 +20,7 @@ haversine(f64 x0, f64 y0, f64 x1, f64 y1, f64 earth_radius) {
     lat1 = radians_from_degrees(lat1);
     lat2 = radians_from_degrees(lat2);
     
-    f64 a = square(sin(dlat/2.0)) + cos(lat1)*cos(lat2)*square(sinf(dlon/2));
+    f64 a = square(sin(dlat/2.0)) + cos(lat1)*cos(lat2)*square(sin(dlon/2));
     f64 c = 2.0*asin(sqrt(a));
     
     f64 result = earth_radius * c;
@@ -58,7 +58,6 @@ offload_to_buffer(mem_arena *json_arena, mem_arena *result_arena, f64 y0, f64 y1
     /* NOTE(abid): If end of buffer, or we are out of memory for next round, then flush. */
     if(result_arena->used >= result_arena->size || is_last) {
         FILE *file_handle = fopen(f64_filename, "ab");
-        usize file_size = fseek(file_handle, 0, SEEK_END);
         assert(file_handle, "cannot save to .f64 file.");
         fwrite(result_arena->ptr, sizeof(f64), result_arena->used/sizeof(f64), file_handle);
         fclose(file_handle);

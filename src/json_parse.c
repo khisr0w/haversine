@@ -8,6 +8,16 @@
 
 #include "json_parse.h"
 
+/* TODO(abid): Things still to be implemented:
+ * - Handle boolean values.
+ * - Handle null values.
+ * - Handle escaped double quotes (\") inside a string/key value.
+ * - Handle having zero at start of a number (value can either be zero, or decimal, but nothing else).
+ * - Handle scientific notation.
+ * - Handle comma at the end of the last element.
+ * - Write our own string to f64/i64 conversion.
+ */
+
 /* NOTE(abid): Lexer routines. */
 internal inline token *
 buffer_push_token(token_type token_type, void *token_value, parser_state *state) {
@@ -129,7 +139,6 @@ jp_push_str_to_cstr(string_value *str, mem_arena *json_arena) {
 
 internal void
 jp_lexer(buffer *json_buffer, parser_state *state) {
-    /* TODO(abid): Guard against using comma at the end of a scope. */
     bool comman_encountered = false;
     json_scope *scope = NULL;
 
@@ -190,7 +199,6 @@ jp_lexer(buffer *json_buffer, parser_state *state) {
 
                 scope = scope->parent;
             } break;
-            // case '\0': { buffer_push_token(tt_eot, 0, state); buffer_consume(json_buffer); } break;
             case '\t':
             case '\n':
             case '\r':
@@ -218,7 +226,7 @@ jp_lexer(buffer *json_buffer, parser_state *state) {
             }
         }
     }
-    buffer_push_token(tt_eot, 0, state); buffer_consume(json_buffer);
+    buffer_push_token(tt_eot, 0, state);
 
     state->current_token = state->token_list;
 }
@@ -426,10 +434,7 @@ read_file(char *filename, usize object_size) {
     FILE *handle = fopen(filename, "rb");
     assert(handle != NULL, "file could not be opened.");
 
-    /* NOTE(abid): Get the size of the File */
-    fseek(handle, 0, SEEK_END);
-    usize file_size = ftell(handle);
-    rewind(handle);
+    usize file_size = platform_file_64bit_get_size(filename);
 
     /* NOTE(abid): Create buffer. */
     void* content = platform_allocate(file_size);
@@ -457,7 +462,7 @@ jp_load(char *Filename) {
         .str = (char *)read_file(Filename, /*object_size=*/1),
         .current_idx = 0
     };
-    usize physical_mem_max_size = platform_ram_size_get();
+    usize physical_mem_max_size = platform_ram_get_size();
     parser_state state = {
         .json = NULL,
         .temp_arena = arena_create(megabyte(10), (u64)(physical_mem_max_size/2)),

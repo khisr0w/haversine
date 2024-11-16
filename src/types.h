@@ -26,8 +26,7 @@ typedef int16_t i16;
 #define global_var static
 #define true 1
 #define false 0
-#define ArraySize(Arr) sizeof((Arr)) / sizeof((Arr)[0])
-#define Assert(Expr, ErrorStr) if(!(Expr)) { fprintf(stderr, "ASSERTION ERROR (%s:%d): " ErrorStr "\nExiting...\n", __FILE__, __LINE__); *(i32 *)0 = 0; }
+#define array_size(Arr) sizeof((Arr)) / sizeof((Arr)[0])
 
 #define TYPES_H
 #endif

@@ -10,6 +10,8 @@
 
 #ifdef PLT_WIN
 #include <windows.h>
+#include <sys/types.h>
+#include <sys/stat.h>
 #elif PLT_LINUX
 #include <sys/mman.h>
 #include <unistd.h>
@@ -51,10 +53,26 @@ radians_from_degrees(f64 degrees) {
     return result;
 }
 
-internal usize
-platform_get_page_size() {
+internal inline usize
+platform_file_64bit_get_size(char *filename) {
 #ifdef PLT_WIN
+    struct __stat64 file_stat;
+    _stat64(filename, &file_stat);
+
+#elif PLT_LINUX
     assert(0, "NotImplemented.");
+    struct stat file_stat;
+    stat(filename, &file_stat);
+#endif
+    return file_stat.st_size;
+}
+
+internal usize
+platform_page_get_size() {
+#ifdef PLT_WIN
+    SYSTEM_INFO sys_info = {0};
+    GetSystemInfo(&sys_info);
+    return sys_info.dwPageSize;
 #elif PLT_LINUX
     return sysconf(_SC_PAGE_SIZE);
 #endif
@@ -62,7 +80,7 @@ platform_get_page_size() {
 
 /* NOTE(abid): Get the physical memory (RAM) size. */
 inline internal usize
-platform_ram_size_get() {
+platform_ram_get_size() {
 #ifdef PLT_WIN
     MEMORYSTATUSEX mem_stat = { .dwLength = sizeof(MEMORYSTATUSEX) };
     GlobalMemoryStatusEx(&mem_stat);
@@ -115,8 +133,9 @@ platform_reserve(usize reserve_size) {
 /* NOTE(abid): Commit memory for the already reserved virtual memory space. */
 inline internal void *
 platform_commit(void *base_addr, usize commit_size) {
+    void *result = NULL;
 #ifdef PLT_WIN
-    void *result = VirtualAlloc(base_addr, commit_size, MEM_COMMIT, PAGE_READWRITE);
+    result = VirtualAlloc(base_addr, commit_size, MEM_COMMIT, PAGE_READWRITE);
     if(result == NULL) {
         GetLastError();
         exit(EXIT_FAILURE);
@@ -128,7 +147,7 @@ platform_commit(void *base_addr, usize commit_size) {
         perror("madvise failed");
         exit(EXIT_FAILURE);
     }
-    void *result = base_addr;
+    result = base_addr;
 #endif 
 
     return result;
@@ -139,9 +158,9 @@ platform_free(void *ptr, usize size) {
 #ifdef PLT_WIN
     /* NOTE(abid): Win32 requires the size to be zero when MEM_RELEASE. */
     size = 0;
-    bool result = (VirtualFree(ptr, size, MEM_RELEASE) != 0);
+    bool result = VirtualFree(ptr, size, MEM_RELEASE) != 0;
 #elif PLT_LINUX
-    bool result = (munmap(ptr, size) == 0);
+    bool result = munmap(ptr, size) == 0;
 #endif
 
     return result;
@@ -162,8 +181,8 @@ mem_temp_begin(mem_arena *arena) {
 inline internal void
 mem_temp_end(temp_memory temp_mem) {
     mem_arena *arena = temp_mem.arena;
-    Assert(arena->used >= temp_mem.used, "something was freed when it shouldn't have been.");
-    Assert(arena->temp_count > 0, "no temp memory registered for it to end.");
+    assert(arena->used >= temp_mem.used, "something was freed when it shouldn't have been.");
+    assert(arena->temp_count > 0, "no temp memory registered for it to end.");
     arena->used = temp_mem.used;
 
     --arena->temp_count;
@@ -172,7 +191,7 @@ mem_temp_end(temp_memory temp_mem) {
 /* NOTE(abid): To make sure we always have size on a page boundary. */
 internal usize
 ceil_to_page_size(usize size) {
-    usize page_size = platform_get_page_size();
+    usize page_size = platform_page_get_size();
 
     usize result = page_size;
     if(size > page_size) {
@@ -193,7 +212,7 @@ arena_create(usize bytes_to_allocate, usize bytes_to_reserve) {
 
     // usize physical_mem_max_size = bytes_to_reserve;
     /* TODO(abid): Probably need to get rid of the ram branch here, user can decide. - 16.Oct.2024 */
-    if(bytes_to_reserve == 0) bytes_to_reserve = platform_ram_size_get() - sizeof(mem_arena);
+    if(bytes_to_reserve == 0) bytes_to_reserve = platform_ram_get_size() - sizeof(mem_arena);
 
     mem_arena *arena = (mem_arena *)platform_allocate(sizeof(mem_arena));
     void *base_addr = platform_reserve(bytes_to_reserve);

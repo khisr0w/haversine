@@ -22,6 +22,6 @@ stat_f64_accumulate(f64 Value, stat_f64 *Stat) {
 }
 internal inline f64
 stat_f64_mean(stat_f64 *Stat) {
-    Assert(Stat->Count > 0, "cannot calculate mean for count < 1");
+    assert(Stat->Count > 0, "cannot calculate mean for count < 1");
     return Stat->Sum / Stat->Count;
 }
