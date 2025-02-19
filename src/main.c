@@ -86,7 +86,7 @@ benchmark_haversine_gen_and_load(u64 number_pairs, u64 num_clusters, char *filen
     /* NOTE(abid): This benchmarks the time(ms) it takes to:
      * - Generate haversine values and save them.
      * - Read and Parse the saved haversine json file.
-     * - Iterate over all haversine pairs and sum their calcultion result.
+     * - Iterate over all haversine pairs and sum their calculation.
      */
     u64 cpu_freq = platform_cpu_timer_freq_estimate_get(/*ms_to_wait =*/0);
 

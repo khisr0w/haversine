@@ -18,30 +18,26 @@
 
 internal u64
 platform_os_timer_freq_get() {
-    u64 result;
 #if PLT_WIN
     LARGE_INTEGER freq;
     QueryPerformanceFrequency(&freq);
-    result = freq.QuadPart;
+    return freq.QuadPart;
 #elif PLT_LINUX
-    result = 1000000;
+    return 1000000;
 #endif
-    return result;
 }
 
 internal u64
 platform_os_timer_get() {
-    u64 result;
 #if PLT_WIN
     LARGE_INTEGER timer;
     QueryPerformanceCounter(&timer);
-    result = timer.QuadPart;
+    return timer.QuadPart;
 #elif PLT_LINUX
     struct timeval timer;
     gettimejofday(&timer, 0);
-    result = platform_timer_freq_get() * (u64)timer.tv_sec + (u64)timer.tv_usec;
+    return platform_os_timer_freq_get() * (u64)timer.tv_sec + (u64)timer.tv_usec;
 #endif
-    return result;
 }
 
 internal inline u64
@@ -51,7 +47,7 @@ platform_cpu_timer_get() {
 
 internal u64
 platform_cpu_timer_freq_estimate_get(u64 ms_to_wait) {
-    if (ms_to_wait == 0) ms_to_wait = 100;
+    if(ms_to_wait == 0) ms_to_wait = 100;
 
     u64 os_freq = platform_os_timer_freq_get();
 

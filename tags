@@ -4,7 +4,7 @@
 !_TAG_PROGRAM_NAME	Exuberant Ctags	//
 !_TAG_PROGRAM_URL	http://ctags.sourceforge.net	/official site/
 !_TAG_PROGRAM_VERSION	5.8	//
-BENCH_H	.\src\bench.h	78;"	d
+BENCH_H	.\src\bench.h	74;"	d
 Count	.\src\stat.h	/^    u64 Count;$/;"	m	struct:__anon13
 EARTH_RAIDUS	.\src\haversine.c	10;"	d	file:
 JSON_PARSE_H	.\src\json_parse.h	131;"	d
