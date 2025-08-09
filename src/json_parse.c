@@ -139,6 +139,8 @@ jp_push_str_to_cstr(string_value *str, mem_arena *json_arena) {
 
 internal void
 jp_lexer(buffer *json_buffer, parser_state *state) {
+    bench_function_begin();
+
     bool comman_encountered = false;
     json_scope *scope = NULL;
 
@@ -229,15 +231,8 @@ jp_lexer(buffer *json_buffer, parser_state *state) {
     buffer_push_token(tt_eot, 0, state);
 
     state->current_token = state->token_list;
-}
 
-/* NOTE(abid): String routines. */
-internal usize
-cstring_length(char *c_string) {
-    usize result = 0;
-    while(*c_string++) ++result;
-
-    return result;
+    bench_function_end();
 }
 
 internal string_value
@@ -246,20 +241,6 @@ string_make(char *c_string) {
         .data = c_string,
         .length = cstring_length(c_string)
     };
-}
-
-internal usize
-jp_hash_from_string(char *string) {
-    /* NOTE(abid): Adapted from `https://stackoverflow.com/questions/7616461/generate-a-hash-from-string-in-javascript` */ 
-    usize string_len = cstring_length(string);
-    usize hash = 0;
-    if(string_len == 0) return hash;
-
-    for(usize idx = 0; idx < string_len; ++idx) {
-        char chr = string[idx];
-        hash = ((hash << 5) - hash) + chr;
-    }
-    return hash;
 }
 
 /* NOTE(abid): JSON list routines. */
@@ -313,6 +294,8 @@ jp_add_to_scope(json_scope *scope, json_value *j_value) {
 
 internal void 
 jp_parser(parser_state *state) {
+    bench_function_begin();
+
     token *current_token = state->token_list;
     /* NOTE(abid): The initial tokens must dict_begin followed by a key. */
     token_expect(current_token, tt_dict_begin);
@@ -372,7 +355,7 @@ jp_parser(parser_state *state) {
                 // dict_kv *kv_element = parent_dict->table + scope->idx;
 
                 char *key = jp_push_str_to_cstr((string_value *)current_token->body, json_arena);
-                usize hash = jp_hash_from_string(key);
+                usize hash = hash_from_string(key);
                 usize original_idx = (hash % parent_dict->count);
 
                 dict_kv *kv_element = NULL;
@@ -427,10 +410,12 @@ jp_parser(parser_state *state) {
         }
         token_advance(&current_token);
     }
+    bench_function_end();
 }
 
 internal void *
 read_file(char *filename, usize object_size) {
+
     FILE *handle = fopen(filename, "rb");
     assert(handle != NULL, "file could not be opened.");
 
@@ -458,6 +443,8 @@ read_file(char *filename, usize object_size) {
 
 internal json_dict *
 jp_load(char *Filename) {
+    bench_function_begin();
+
     buffer buffer = {
         .str = (char *)read_file(Filename, /*object_size=*/1),
         .current_idx = 0
@@ -476,6 +463,8 @@ jp_load(char *Filename) {
     arena_free(state.temp_arena);
 
     return (json_dict *)(state.json + 1);
+
+    bench_function_end();
 }
 
 
@@ -483,7 +472,7 @@ jp_load(char *Filename) {
 #define jp_get_dict_value(dict, key, type) (type*)(_jp_get_dict_value(dict, key) + 1)
 internal json_value *
 _jp_get_dict_value(json_dict *dict, char *key) {
-    usize original_idx = jp_hash_from_string(key) % dict->count;
+    usize original_idx = hash_from_string(key) % dict->count;
     usize potential_idx = original_idx;
 
     dict_kv *kv_element = NULL;

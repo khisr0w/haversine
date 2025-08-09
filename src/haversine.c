@@ -7,7 +7,7 @@
     +======================================| Copyright © Sayed Abid Hashimi |==========+  */
 
 /* NOTE(abid): EarthRadius is generally expected to be 6372.8 */
-#define EARTH_RAIDUS 6372.8
+#define EARTH_RADIUS 6372.8
 internal f64
 haversine(f64 x0, f64 y0, f64 x1, f64 y1, f64 earth_radius) {
     f64 lat1 = y0;
@@ -52,7 +52,7 @@ offload_to_buffer(mem_arena *json_arena, mem_arena *result_arena, f64 y0, f64 y1
 
     /* NOTE(abid): Save the result to buffer and .f64 file. */
     f64 *dest = arena_current(result_arena);
-    *dest = haversine(x0, y0, x1, y1, EARTH_RAIDUS);
+    *dest = haversine(x0, y0, x1, y1, EARTH_RADIUS);
     arena_advance(result_arena, 1, f64);
 
     /* NOTE(abid): If end of buffer, or we are out of memory for next round, then flush. */
@@ -76,13 +76,15 @@ offload_to_buffer(mem_arena *json_arena, mem_arena *result_arena, f64 y0, f64 y1
 
 internal stat_f64
 generate_haversine_json(u64 number_pairs, u64 num_clusters, char *filename) {
+    bench_function_begin();
+
     mem_arena *temp_arena = arena_create(kilobyte(1), gigabyte(10));
     mem_arena *json_arena = arena_create(megabyte(1), terabyte(10));
     mem_arena *result_arena = arena_create(megabyte(1), terabyte(10));
 
     stat_f64 haversine_stat = {0};
 
-    u64 filename_len = strlen(filename); // Yes, I ain't using strlen
+    u64 filename_len = strlen(filename);
     char *json_extension = ".json";
     char *f64_extension = ".f64";
     u64 json_extension_len = strlen(json_extension);
@@ -135,7 +137,7 @@ generate_haversine_json(u64 number_pairs, u64 num_clusters, char *filename) {
 
             /* NOTE(abid): In case we have remainders left. */
             u64 num_to_generate = ((cluster_idx == num_clusters-1) && pair_remainder) ? pair_remainder
-                                                                                   : num_pair_per_cluster;
+                                                                                      : num_pair_per_cluster;
             for(u64 pair_idx = 0; pair_idx < num_to_generate; pair_idx++) {
                 f64 lat1 = rand_range_f64(lat1_start, lat1_start+lat1_size);
                 f64 lat2 = rand_range_f64(lat2_start, lat2_start+lat2_size);
@@ -145,9 +147,11 @@ generate_haversine_json(u64 number_pairs, u64 num_clusters, char *filename) {
                 stat_f64_accumulate(lat2, &haversine_stat);
                 stat_f64_accumulate(lon1, &haversine_stat);
                 stat_f64_accumulate(lon2, &haversine_stat);
-                offload_to_buffer(json_arena, result_arena, lat1, lat2, lon1, lon2,
-                                  cluster_idx*num_pair_per_cluster + pair_idx + 1 == number_pairs,
-                                  json_filename, f64_filename);
+                offload_to_buffer(
+                    json_arena, result_arena, lat1, lat2, lon1, lon2,
+                    cluster_idx*num_pair_per_cluster + pair_idx + 1 == number_pairs,
+                    json_filename, f64_filename
+                );
             }
         }
     } else {
@@ -161,10 +165,14 @@ generate_haversine_json(u64 number_pairs, u64 num_clusters, char *filename) {
             stat_f64_accumulate(lon1, &haversine_stat);
             stat_f64_accumulate(lon2, &haversine_stat);
 
-            offload_to_buffer(json_arena, result_arena, lat1, lat2, lon1, lon2,
-                              idx+1 == number_pairs, json_filename, f64_filename);
+            offload_to_buffer(
+                json_arena, result_arena, lat1, lat2, lon1, lon2,
+                idx+1 == number_pairs, json_filename, f64_filename
+            );
         }
     }
 
     return haversine_stat;
+
+    bench_function_end()
 }

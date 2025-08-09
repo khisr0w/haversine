@@ -24,13 +24,9 @@
 #define gigabyte(value) (megabyte(value)*1024LL)
 #define terabyte(value) (gigabyte(value)*1024LL)
 
-#define __assert_glue(a, b) a ## b
-
-#define assert_static(expr)                      \
-    enum {                                       \
-        __assert_glue(assert_fail_at_, __LINE__) \
-            = 1 (int)(!!(expr))                  \
-    }
+#define assert_static(expr) \
+    typedef char static_assertion_failed[(!!(expr)) * 2 - 1]
+    // enum { assert_fail_at_ ## __LINE__ = 1/(int)(!!(expr)) }
 
 #define assert(Expr, ErrorStr, ...) \
     if((Expr)) { } \
@@ -40,6 +36,15 @@
         *(i32 *)0 = 0; \
         exit(EXIT_FAILURE); \
     }
+
+
+inline internal void
+cstr_copy(char *src, char *dest, u64 dest_size) {
+    for(u64 idx = 0; idx < dest_size; ++idx) {
+        dest[idx] = src[idx];
+        if(src[idx] == 0) break;
+    }
+}
 
 inline internal f64
 square(f64 a) {
@@ -254,3 +259,25 @@ push_size(usize size, mem_arena *arena) {
 
 #define arena_current(Arena) (void *)((u8 *)(Arena)->ptr + (Arena)->used)
 #define arena_advance(Arena, Number, Type) (Arena)->used += sizeof(Type)*(Number)
+
+internal usize
+cstring_length(char *c_string) {
+    usize result = 0;
+    while(*c_string++) ++result;
+
+    return result;
+}
+
+internal u64
+hash_from_string(char *string) {
+    /* NOTE(abid): Adapted from `https://stackoverflow.com/questions/7616461/generate-a-hash-from-string-in-javascript` */
+    usize string_len = cstring_length(string);
+    usize hash = 0;
+    if(string_len == 0) return hash;
+
+    for(usize idx = 0; idx < string_len; ++idx) {
+        char chr = string[idx];
+        hash = ((hash << 5) - hash) + chr;
+    }
+    return hash;
+}

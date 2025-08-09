@@ -133,12 +133,12 @@ parse_err	.\src\json_parse.h	24;"	d
 parser_state	.\src\json_parse.h	/^} parser_state;$/;"	t	typeref:struct:__anon9
 platform_allocate	.\src\utils.c	/^platform_allocate(usize alloc_size) {$/;"	f
 platform_commit	.\src\utils.c	/^platform_commit(void *base_addr, usize commit_size) {$/;"	f
-platform_cpu_timer_freq_estimate_get	.\src\bench.h	/^platform_cpu_timer_freq_estimate_get(u64 ms_to_wait) {$/;"	f
-platform_cpu_timer_get	.\src\bench.h	/^platform_cpu_timer_get() {$/;"	f
 platform_file_64bit_get_size	.\src\utils.c	/^platform_file_64bit_get_size(char *filename) {$/;"	f
 platform_free	.\src\utils.c	/^platform_free(void *ptr, usize size) {$/;"	f
-platform_os_timer_freq_get	.\src\bench.h	/^platform_os_timer_freq_get() {$/;"	f
-platform_os_timer_get	.\src\bench.h	/^platform_os_timer_get() {$/;"	f
+platform_get_cpu_timer	.\src\bench.h	/^platform_get_cpu_timer() {$/;"	f
+platform_get_cpu_timer_freq_estimate	.\src\bench.h	/^platform_get_cpu_timer_freq_estimate(u64 ms_to_wait) {$/;"	f
+platform_get_os_timer	.\src\bench.h	/^platform_get_os_timer() {$/;"	f
+platform_get_os_timer_freq	.\src\bench.h	/^platform_get_os_timer_freq() {$/;"	f
 platform_page_get_size	.\src\utils.c	/^platform_page_get_size() {$/;"	f
 platform_ram_get_size	.\src\utils.c	/^platform_ram_get_size() {$/;"	f
 platform_reserve	.\src\utils.c	/^platform_reserve(usize reserve_size) {$/;"	f

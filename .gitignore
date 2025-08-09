@@ -1,4 +1,7 @@
 binary
+build
+CMakeFiles
+CMakeCache.txt
 **/*.f64  
 **/*.json  
 tags
